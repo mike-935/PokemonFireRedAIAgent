@@ -8,7 +8,7 @@ def find_rom():
     for file in os.listdir("Emulator"):
         if file.endswith(".gba"):
             possible_roms.append(file)
-    return possible_roms[0] if possible_roms else None
+    return os.path.join("Emulator", possible_roms[0]) if possible_roms else None
 
 def find_save():
     possible_saves = []
@@ -18,14 +18,14 @@ def find_save():
             possible_saves.append(file)
     possible_saves.sort()
     print(possible_saves)
-    return possible_saves[0] if possible_saves else None
+    return os.path.join("Emulator", possible_saves[0]) if possible_saves else None
 
 
 def run_program():
     emulator_path = ""
-    rom_path = os.path.join("Emulator", find_rom())
+    rom_path = find_rom()
     script_path = "GameData.lua"
-    save_path = os.path.join("Emulator", find_save())
+    save_path = find_save()
     if platform.system() == "Linux":
         print("On Linux")
     elif platform.system() == "Darwin":
@@ -47,7 +47,7 @@ def run_program():
     process_args = [emulator_path, "--script",
          script_path, rom_path]
 
-    if save_path and os.path.exists(save_path):
+    if save_path:
         print("User uses the .ss Save file and it was found found at:", save_path)
         process_args.append("--savestate")
         process_args.append(save_path)
