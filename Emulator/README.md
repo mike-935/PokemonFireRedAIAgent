@@ -1,0 +1,1 @@
+Store emulator, rom, and save files in the same directory as the emulator executable.

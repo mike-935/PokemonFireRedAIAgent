@@ -40,6 +40,13 @@ ss1[2] >> 24 gets you the upper 8 bits
 
 Scanning the keys returns a hex value that can be a combination of keys,
 so for right and start it is 0x18 which is 0x10 and 0x08 which you can combine as (0x10 | 0x08)
+
+This will read from the rom which means static info that doesn't change
+emu.memory.cart0:readRange
+
+This will read from the actual emulator memory which is dynamic and changes
+emu:readX()
+
 --]]
 
 
@@ -292,8 +299,6 @@ function InitializeGame()
     if not Game then
         console:error("Failed to initialize game data!")
         return
-    else
-        console:log("Game data initialized successfully!")
     end
 
     PrintBuffer = console:createBuffer("Print")
@@ -385,7 +390,6 @@ function Update()
 		-- If in battle then we gotta handle that logic
 		if InBattleAddress~=emu:read32(Game.inBattle) then
             PrintBuffer:print("In Battle Address has changed")
-
         end
 		printPokeStatus(Game, PrintBuffer, CurrentPokemon)
 		Prev = emu:read32(CurrentPokemon)
@@ -421,19 +425,26 @@ function printPokeStatus(game, buffer, pkm)
 	local inBattle = emu:read32(game.inBattle)
 	for i = 1, 4 do
 		local move = currentPokemon.moves[i]
-		-- buffer:print(string.format("Number %i: \n", move))	
+		-- buffer:print(string.format("Number %i: \n", move))
+		--
 		local moveName = game.moveNames + (currentPokemon.moves[i] * 13)
 	    local name = game:toString(emu.memory.cart0:readRange(moveName, 12))
+
 	    local moveEffectAddress = game.moveData + (currentPokemon.moves[i] * 12)
 	    local effectID = emu.memory.cart0:read8(moveEffectAddress)
+
+        --
 		local damageAddress = game.moveData + (currentPokemon.moves[i] * 12) + 1
 	    local damage = emu.memory.cart0:read8(damageAddress)
+
 		local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
 	    local attackTypeNumber = emu.memory.cart0:read8(attackTypeID)
 		local attackTypeAddress = game.romTypesTable + (attackTypeNumber * 7)
 		local attackType = game:toString(emu.memory.cart0:readRange(attackTypeAddress, 6))
+
 		local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
 		local accuracy = emu.memory.cart0:read8(accuracyAddress)
+
 		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s\n",
 		i, name, damage, attackType, accuracy, effectID))
 	end	
