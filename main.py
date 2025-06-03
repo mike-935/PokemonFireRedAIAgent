@@ -46,7 +46,7 @@ def run_program():
 
 
     process = subprocess.Popen(
-        [emulator_path, "--savestate", save_path, "--script",
+        [emulator_path, "--script",
          script_path, rom_path],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
