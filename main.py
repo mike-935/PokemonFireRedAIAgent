@@ -24,8 +24,8 @@ def find_save():
 def run_program():
     emulator_path = ""
     rom_path = os.path.join("Emulator", find_rom())
-    save_path = os.path.join("Emulator", find_save())
     script_path = "GameData.lua"
+    save_path = os.path.join("Emulator", find_save())
     if platform.system() == "Linux":
         print("On Linux")
     elif platform.system() == "Darwin":
@@ -37,17 +37,26 @@ def run_program():
     #print("Files exist?")
     #print("PokemonStatsGen3.lua:", os.path.isfile("./PokemonStatsGen3.lua"))
     #print("PokemonFireRed.gba:", os.path.isfile("Emulator/PokemonFireRed.gba"))
-    if os.path.exists(emulator_path) and os.path.exists(rom_path) and os.path.exists(save_path):
+
+    if os.path.exists(emulator_path) and os.path.exists(rom_path):
         print("Emulator found at:", emulator_path)
         print("ROM found at:", rom_path)
-        print("Save state found at:", save_path)
     else:
-        print("Failed to find emulator, ROM, or save state.")
+        print("Failed to find emulator or ROM")
+
+    process_args = [emulator_path, "--script",
+         script_path, rom_path]
+
+    if save_path and os.path.exists(save_path):
+        print("User uses the .ss Save file and it was found found at:", save_path)
+        process_args.append("--savestate")
+        process_args.append(save_path)
+    else:
+        print("No save file found, using default save state.")
 
 
     process = subprocess.Popen(
-        [emulator_path, "--script",
-         script_path, rom_path],
+        process_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
