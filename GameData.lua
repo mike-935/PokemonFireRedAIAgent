@@ -42,6 +42,9 @@ Scanning the keys returns a hex value that can be a combination of keys,
 so for right and start it is 0x18 which is 0x10 and 0x08 which you can combine as (0x10 | 0x08)
 --]]
 
+
+-- This is the start of the GameData functionality
+
 -- Represents the ROM and the data on it
 local GameData = {
     new = function (self, game)
@@ -218,6 +221,39 @@ function GameData.getPokemonData(game, pokemonAddress)
 
 end
 
+
+function GameData.generateCommandString(game, command)
+    local command = "Command: " .. command .. "\n"
+    -- This will separate the command, the player pokemon stuff, and the enemy pokemon stuff
+    local pokemonCommandDelimiter = "|\n"
+    -- This will separate the pokemon data that is for the player and the opponent
+    local trainerPokemonDelimiter = "/\n"
+    -- This will separate the pokemon for each pokemon in the player's party
+    local pokemonDelimiter = "-\n"
+
+    -- Start the result string with the command and delimiter
+    local commandString = command .. pokemonCommandDelimiter
+
+    -- get the player's pokemon as a string
+    local party = emu:read8(Game.partyCount)
+
+
+
+    return commandString
+end
+
+function GameData.generatePokemonAsString(game, pokemon)
+     -- This will separate the data for each pokemon in the player's party
+    local dataDelimiter = ",\n"
+    -- This will separate the data for each move in the player's party
+    local moveDataDelimiter = "_\n"
+
+end
+
+
+
+-- This is the start of functionality associated the the mGBA emulator
+
 function InitializeGame()
     -- Represents the FireRed rom data
     Game = GameData:new({
@@ -260,31 +296,39 @@ function InitializeGame()
 		}
     CurrentSelectedPokemon = 1
     LastPressedKey = nil
+    initializeSocketConnection()
+    console:log("Game initialized successfully!")
 end
 
+-- On Game reset (Not scripting reset), do this behavior
 function ResetGame()
+    console:log("Game has been reset!")
     PrintBuffer:clear()
     Frame = 0
     CurrentSelectedPokemon = 1
     LastPressedKey = nil
+    -- Probably don't have to but lets reset the connection
+    if socket then
+        socket:close()
+        console:log("Socket connection closed.")
+    end
+    initializeSocketConnection()
 end
 
-
-Right = 0x10
-Start = 0x08
-Left = 0x20
-
 function Input()
+    local right = 0x10
+    local start = 0x08
+    local left = 0x20
     local selectedKey = emu:getKeys()
     local partyCount = emu:read8(Game.partyCount)
     if selectedKey ~= LastPressedKey then
         LastPressedKey = selectedKey
-        if selectedKey == Right then
+        if selectedKey == (right | start) then
             CurrentSelectedPokemon = CurrentSelectedPokemon + 1
             if CurrentSelectedPokemon > partyCount then
                 CurrentSelectedPokemon = 0
             end
-        elseif selectedKey == Left then
+        elseif selectedKey == (left | start) then
             CurrentSelectedPokemon = CurrentSelectedPokemon - 1
             if CurrentSelectedPokemon < 1 then
                 CurrentSelectedPokemon = partyCount
@@ -322,7 +366,14 @@ function Update()
         return
     end
 
+    -- need to check if we entered battle and if we are still in battle and when things/turn changes
+
     if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattleAddress~=emu:read32(Game.inBattle) then
+		-- If in battle then we gotta handle that logic
+		if InBattleAddress~=emu:read32(Game.inBattle) then
+            PrintBuffer:print("In Battle Address has changed")
+
+        end
 		printPokeStatus(Game, PrintBuffer, CurrentPokemon)
 		Prev = emu:read32(CurrentPokemon)
 		PrevExp = Game:getPokemonData(CurrentPokemon).experience
@@ -360,13 +411,18 @@ function printPokeStatus(game, buffer, pkm)
 		-- buffer:print(string.format("Number %i: \n", move))	
 		local moveName = game.moveNames + (currentPokemon.moves[i] * 13)
 	    local name = game:toString(emu.memory.cart0:readRange(moveName, 12))
+	    local moveEffectAddress = game.moveData + (currentPokemon.moves[i] * 12)
+	    local effectID = emu.memory.cart0:read8(moveEffectAddress)
 		local damageAddress = game.moveData + (currentPokemon.moves[i] * 12) + 1
 	    local damage = emu.memory.cart0:read8(damageAddress)
 		local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
 	    local attackTypeNumber = emu.memory.cart0:read8(attackTypeID)
 		local attackTypeAddress = game.romTypesTable + (attackTypeNumber * 7)
 		local attackType = game:toString(emu.memory.cart0:readRange(attackTypeAddress, 6))
-		buffer:print(string.format("Move %i: %-15s Damage: %-5s %-8s\n", i, name, damage, attackType))
+		local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
+		local accuracy = emu.memory.cart0:read8(accuracyAddress)
+		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s\n",
+		i, name, damage, attackType, accuracy, effectID))
 	end	
 	--[[
 	local types = ""
@@ -380,10 +436,57 @@ function printPokeStatus(game, buffer, pkm)
 
 end
 
+
+-- This is the start of the Socket functionality to communicate with our python code
+
+local socket = socket:tcp()
+
+function initializeSocketConnection()
+    local ip_address = "127.0.0.1"
+    local port = 65432
+    socket:connect(ip_address, port)
+    console:log("Connected our Socket to: " .. ip_address .. ":" .. port .. "\n")
+    socket:send("Hi Holly and Ashley" .. "\r\n")
+end
+
+function EndSocketConnection()
+    if socket then
+        socket:close()
+        console:log("Socket connection closed.")
+    else
+        console:log("No socket connection to close.")
+    end
+end
+
+function SendMessageToServer(game, message)
+    if not socket or not message then
+        console:error("Unable to send message!")
+        return
+    end
+
+    local commandString = game.generateCommandString(Game, message)
+    if not commandString then
+        console:error("Failed to generate command string!")
+        return
+    end
+
+    local success, err = socket:send(commandString .. "\r\n")
+    if not success then
+        console:error("Failed to send command: " .. err)
+    else
+        console:log("Sent command")
+    end
+end
+
+
+-- Initialize everything for the emulator
+
 callbacks:add("keysRead", Input)
 callbacks:add("frame", Update)
 callbacks:add("reset", ResetGame)
 callbacks:add("start", InitializeGame)
+callbacks:add("stop", EndSocketConnection)
+callbacks:add("shutdown", EndSocketConnection)
 
 if emu then
 	InitializeGame()
