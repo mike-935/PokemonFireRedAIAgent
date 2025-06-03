@@ -54,6 +54,19 @@ local GameData = {
     end 
 }
 
+GBA_KEY = {
+    A = 0,
+    B = 1,
+    SELECT = 2,
+    START = 3,
+    RIGHT = 4,
+    LEFT = 5,
+    UP = 6,
+    DOWN = 7,
+    R = 8,
+    L = 9
+}
+
 -- Character map for converting byte values to characters
 GameData.charmap = { [0]=
 	" ", "À", "Á", "Â", "Ç", "È", "É", "Ê", "Ë", "Ì", "こ", "Î", "Ï", "Ò", "Ó", "Ô",
@@ -478,6 +491,36 @@ function SendMessageToServer(game, message)
     end
 end
 
+function ReceieveFromSocket()
+    if socket:hasdata() then
+        local msg = socket:receive(1375)
+        if msg ~= nil then
+            console:log("[+] server message: " .. msg)
+            local parts = {}
+
+            for part in string.gmatch(msg, "%S+") do
+                table.insert(parts, part)
+            end
+
+            if #parts == 2 then
+                local command = parts[1]
+                local value = parts[2]
+
+                if command == "PRESS_KEY" then
+                    local input_num = tonumber(value)
+                    emu:addKey(input_num)
+                end
+
+                if command == "RELEASE_KEY" then
+                    local input_num = tonumber(value)
+                    emu:clearKey(input_num)
+                end
+            end
+        end
+    end
+
+end
+
 
 -- Initialize everything for the emulator
 
@@ -487,6 +530,8 @@ callbacks:add("reset", ResetGame)
 callbacks:add("start", InitializeGame)
 callbacks:add("stop", EndSocketConnection)
 callbacks:add("shutdown", EndSocketConnection)
+
+socket:add("received", ReceieveFromSocket)
 
 if emu then
 	InitializeGame()

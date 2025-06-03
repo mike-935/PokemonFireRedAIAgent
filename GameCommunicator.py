@@ -16,7 +16,7 @@ class GameCommunicator:
 
     def send_message(self, connection, message):
         print(f'Sent Message: {message}')
-        connection.sendall(message)
+        connection.sendall(message.encode("utf-8"))
 
     def recieve_message(self, connection):
         message = ""
@@ -28,6 +28,13 @@ class GameCommunicator:
             message += data
 
         return message
+    
+    def send_button(self, connection, value):
+        self.send_message(connection, f'PRESS_KEY {value}')
+        # return self.recieve_message()
+    
+    def send_button_release(self, connection, value):
+        self.send_message(connection, f'RELEASE_KEY {value}')
 
 
     def run(self):
@@ -39,6 +46,8 @@ class GameCommunicator:
                 while True:
                     data = self.recieve_message(connection)
                     if data:
+                        self.send_button(connection, 3)
+                        # self.send_button_release(connection, 0)
                         print('We read:', data)
                     # parse data
                     # then send something
