@@ -1,32 +1,36 @@
-import GameCommunicator as GC
+import sys
+import GameCommunicator
 import subprocess
 import os
 import platform
+from glob import glob
 
+# Finds the first .gba file in the Emulator directory and returns its path.
 def find_rom():
     possible_roms = []
-    for file in os.listdir("Emulator"):
-        if file.endswith(".gba"):
-            possible_roms.append(file)
-    return os.path.join("Emulator", possible_roms[0]) if possible_roms else None
+    for rom_path in glob('Emulator/**/*.gba', recursive=True):
+        possible_roms.append(rom_path)
+    return possible_roms[0] if possible_roms else None
 
+# Finds the first save state file in the Emulator directory and returns its path.
 def find_save():
     possible_saves = []
-    for file in os.listdir("Emulator"):
-        split_filepath = file.split(".")
-        if len(split_filepath) > 1 and split_filepath[-1].startswith("ss"):
-            possible_saves.append(file)
+    for savefile_path in glob('Emulator/**/*.ss[0-9]', recursive=True):
+        possible_saves.append(savefile_path)
     possible_saves.sort()
     print(possible_saves)
-    return os.path.join("Emulator", possible_saves[0]) if possible_saves else None
+    return possible_saves[0] if possible_saves else None
 
-
+# Runs the mGBA emulator with the specified ROM and script.
+# If a save state file is found, it will be used; otherwise, the default save state will be used.
+# Supports Linux, macOS, and Windows platforms.
 def run_program():
     emulator_path = ""
     rom_path = find_rom()
     script_path = "GameData.lua"
     save_path = find_save()
     if platform.system() == "Linux":
+        emulator_path = "Emulator/mGBA.exe"
         print("On Linux")
     elif platform.system() == "Darwin":
         emulator_path = "Emulator/mGBA.app/Contents/MacOS/mGBA"
@@ -34,26 +38,23 @@ def run_program():
     elif platform.system() == "Windows":
         emulator_path = "Emulator/mGBA.exe"
         print("On Windows")
-    #print("Files exist?")
-    #print("PokemonStatsGen3.lua:", os.path.isfile("./PokemonStatsGen3.lua"))
-    #print("PokemonFireRed.gba:", os.path.isfile("Emulator/PokemonFireRed.gba"))
 
-    if os.path.exists(emulator_path) and os.path.exists(rom_path):
-        print("Emulator found at:", emulator_path)
-        print("ROM found at:", rom_path)
+    if (emulator_path is not None and rom_path is not None
+            and os.path.exists(emulator_path) and os.path.exists(rom_path)):
+        print(f"Emulator found at: {emulator_path} and ROM found at: {rom_path}")
     else:
         print("Failed to find emulator or ROM")
+        sys.exit()
 
     process_args = [emulator_path, "--script",
          script_path, rom_path]
 
     if save_path:
-        print("User uses the .ss Save file and it was found found at:", save_path)
+        print(".ss Save file found")
         process_args.append("--savestate")
         process_args.append(save_path)
     else:
         print("No save file found, using default save state.")
-
 
     process = subprocess.Popen(
         process_args,
@@ -63,7 +64,22 @@ def run_program():
         text=True
     )
 
+# Creates the list of Pokémon move effects from the move_effects.txt file.
+# Each index in the list corresponds to the effect of the move at that index.
+def create_effect_list():
+    effects = []
+    with open("move_effects.txt", "r") as move_effects_file:
+        lines = move_effects_file.readlines()
+        for line in lines:
+            effect = line.split(" ")[0]
+            effects.append(effect)
+    return effects
+
+
+# move_effects = create_effect_list()
+
 if __name__ == "__main__":
+    Communicator = GameCommunicator.GameCommunicator()
     run_program()
-    Communicator = GC.GameCommunicator()
+    create_effect_list()
     Communicator.run()

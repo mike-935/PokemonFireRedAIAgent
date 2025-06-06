@@ -13,11 +13,12 @@ class GameCommunicator:
         self.port = self.socket.getsockname()[1]
         print(f'Bound to port {self.port}')
 
-
+    # Send a message to the server
     def send_message(self, connection, message):
         print(f'Sent Message: {message}')
         connection.sendall(message.encode("utf-8"))
 
+    # Read a message given from the lua code
     def recieve_message(self, connection):
         message = ""
 
@@ -37,6 +38,7 @@ class GameCommunicator:
         self.send_message(connection, f'RELEASE_KEY {value}')
 
 
+    # Run the server to listen for incoming connections and handle messages
     def run(self):
         try:
             self.socket.listen()
@@ -49,8 +51,6 @@ class GameCommunicator:
                         self.send_button(connection, 3)
                         # self.send_button_release(connection, 0)
                         print('We read:', data)
-                    # parse data
-                    # then send something
 
         except (KeyboardInterrupt, SystemExit) as e:
             print("Exiting gracefully...")

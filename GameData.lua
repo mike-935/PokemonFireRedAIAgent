@@ -113,6 +113,34 @@ function GameData.getPokemonName(game, pokemonIndex)
     return GameData.toString(game, emu.memory.cart0:readRange(nameAddress, 10))
 end
 
+-- Gets the effect id from the given move
+function GameData.getMoveEffectID(game, moveID)
+    local moveEffectAddress = game.moveData + (moveID * 12)
+	return emu.memory.cart0:read8(moveEffectAddress)
+end
+
+-- Gets the damage of the given move
+function GameData.getMoveDamage(game, moveID)
+    local damageAddress = game.moveData + (moveID * 12) + 1
+	return emu.memory.cart0:read8(damageAddress)
+end
+
+-- Gets the type of the given move
+function GameData.getMoveType(game, moveID)
+    -- first get the id relating to the type for this move
+    local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
+	local attackTypeNumber = emu.memory.cart0:read8(attackTypeID)
+	-- with the type's id, look in the rom's type table to find the type name
+	local attackTypeAddress = game.romTypesTable + (attackTypeNumber * 7)
+	return game:toString(emu.memory.cart0:readRange(attackTypeAddress, 6))
+end
+
+-- Gets the accuracy of the given move
+function GameData.getMoveAccuracy(game, moveID)
+    local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
+	return emu.memory.cart0:read8(accuracyAddress)
+end
+
 -- Reads the address of a Pokemon in the player's party and collects the pokemon data
 function GameData.getPokemonData(game, pokemonAddress)
     local pokemon = {}
@@ -289,7 +317,7 @@ function InitializeGame()
         enemyParty = 0x0202402C,
         -- Address for my best guess at what signifies a battle
         inBattle = 0x020386B4,
-        -- Address for where the rom stroes all the names of the moves
+        -- Address for where the rom stores all the names of the moves
         moveNames = (0x00247110) - 13,
         -- Address for where the rom stores the move data
         moveData = (0x00250C80 - 12),
@@ -343,6 +371,7 @@ function Input()
         LastPressedKey = selectedKey
         if selectedKey == (right | start) then
             CurrentSelectedPokemon = CurrentSelectedPokemon + 1
+            send_test()
             if CurrentSelectedPokemon > partyCount then
                 CurrentSelectedPokemon = 0
             end
@@ -482,6 +511,21 @@ function EndSocketConnection()
     end
 end
 
+function send_test()
+    if not socket then
+        console:error("Socket is not initialized!")
+        return
+    end
+
+    local testMessage = "Test message from Lua script"
+    local success, err = socket:send(testMessage .. "\r\n")
+    if not success then
+        console:error("Failed to send test message: " .. err)
+    else
+        console:log("Test message sent successfully.")
+    end
+end
+
 function SendMessageToServer(game, message)
     if not socket or not message then
         console:error("Unable to send message!")
@@ -502,7 +546,7 @@ function SendMessageToServer(game, message)
     end
 end
 
-function ReceieveFromSocket()
+function ReceiveFromSocket()
     if socket:hasdata() then
         local msg = socket:receive(1375)
         if msg ~= nil then
@@ -542,7 +586,7 @@ callbacks:add("start", InitializeGame)
 callbacks:add("stop", EndSocketConnection)
 callbacks:add("shutdown", EndSocketConnection)
 
-socket:add("received", ReceieveFromSocket)
+socket:add("received", ReceiveFromSocket)
 
 if emu then
 	InitializeGame()
