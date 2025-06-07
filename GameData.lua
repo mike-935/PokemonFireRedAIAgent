@@ -548,7 +548,7 @@ end
 
 function ReceiveFromSocket()
     if socket:hasdata() then
-        local msg = socket:receive(1375)
+        local msg = socket:receive(128)
         if msg ~= nil then
             console:log("[+] server message: " .. msg)
             local parts = {}
@@ -564,11 +564,13 @@ function ReceiveFromSocket()
                 if command == "PRESS_KEY" then
                     local input_num = tonumber(value)
                     emu:addKey(input_num)
+                    socket:send("received message" .. "\r\n")
                 end
 
                 if command == "RELEASE_KEY" then
                     local input_num = tonumber(value)
                     emu:clearKey(input_num)
+                    socket:send("received message" .. "\r\n")
                 end
             end
         end

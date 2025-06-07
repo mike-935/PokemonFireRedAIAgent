@@ -37,7 +37,6 @@ class GameCommunicator:
     def send_button_release(self, connection, value):
         self.send_message(connection, f'RELEASE_KEY {value}')
 
-
     # Run the server to listen for incoming connections and handle messages
     def run(self):
         try:
@@ -48,8 +47,11 @@ class GameCommunicator:
                 while True:
                     data = self.recieve_message(connection)
                     if data:
-                        self.send_button(connection, 3)
-                        # self.send_button_release(connection, 0)
+                        command, value = input("Enter command and value: ").split()
+                        if command == "PRESS_KEY":
+                            self.send_button(connection, value + "\r\n")
+                        if command == "RELEASE_KEY":
+                            self.send_button_release(connection, value + "\r\n")
                         print('We read:', data)
 
         except (KeyboardInterrupt, SystemExit) as e:
