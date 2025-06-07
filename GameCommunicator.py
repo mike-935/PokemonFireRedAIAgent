@@ -56,8 +56,12 @@ class GameCommunicator:
 
         except (KeyboardInterrupt, SystemExit) as e:
             print("Exiting gracefully...")
-            self.socket.close()
+            self.close()
             return
+
+    def close(self):
+        print("Closing socket...")
+        self.socket.close()
         
     def parse_input(self, data):
         pass

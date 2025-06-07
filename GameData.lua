@@ -135,6 +135,13 @@ function GameData.getMoveType(game, moveID)
 	return game:toString(emu.memory.cart0:readRange(attackTypeAddress, 6))
 end
 
+-- Gets the type ID of the given move
+function GameData.getMoveTypeID(game, moveID)
+    -- first get the id relating to the type for this move
+    local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
+	return emu.memory.cart0:read8(attackTypeID)
+end
+
 -- Gets the accuracy of the given move
 function GameData.getMoveAccuracy(game, moveID)
     local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
@@ -298,7 +305,10 @@ function GameData.generatePokemonAsString(game, pokemon)
 
 end
 
-
+function readBattleAddress()
+    -- This function reads the battle address to determine if a battle is ongoing
+    return emu:read8(Game.battleAddress)
+end
 
 -- This is the start of functionality associated the the mGBA emulator
 
@@ -316,7 +326,8 @@ function InitializeGame()
         -- (could be a wild pokemon or the first pokemon of a enemy trainer)
         enemyParty = 0x0202402C,
         -- Address for my best guess at what signifies a battle
-        inBattle = 0x020386B4,
+        battleAddress = 0x2023E8A,
+        -- 0x020386B4
         -- Address for where the rom stores all the names of the moves
         moveNames = (0x00247110) - 13,
         -- Address for where the rom stores the move data
@@ -343,6 +354,8 @@ function InitializeGame()
     CurrentSelectedPokemon = 1
     LastPressedKey = nil
     initializeSocketConnection()
+
+    InBattleAddress = readBattleAddress()
     console:log("Game initialized successfully!")
 end
 
@@ -365,17 +378,18 @@ function Input()
     local right = 0x10
     local start = 0x08
     local left = 0x20
+    local right_start = 0x18
+    local left_start = 0x28
     local selectedKey = emu:getKeys()
     local partyCount = emu:read8(Game.partyCount)
     if selectedKey ~= LastPressedKey then
         LastPressedKey = selectedKey
-        if selectedKey == (right | start) then
+        if LastPressedKey == right_start then
             CurrentSelectedPokemon = CurrentSelectedPokemon + 1
-            send_test()
             if CurrentSelectedPokemon > partyCount then
                 CurrentSelectedPokemon = 0
             end
-        elseif selectedKey == (left | start) then
+        elseif LastPressedKey == left_start then
             CurrentSelectedPokemon = CurrentSelectedPokemon - 1
             if CurrentSelectedPokemon < 1 then
                 CurrentSelectedPokemon = partyCount
@@ -408,23 +422,26 @@ function Update()
         return
     end
 
-    if not emu:read32(Game.inBattle) then
+    if not readBattleAddress() then
         PrintBuffer:print("GameData battle address is invalid!")
         return
     end
 
-    -- need to check if we entered battle and if we are still in battle and when things/turn changes
+    if InBattleAddress ~= readBattleAddress() and readBattleAddress() == 0 then
+        console:log("First entering battle!")
+        InBattleAddress = readBattleAddress()
+        return
+    end
 
-    if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattleAddress~=emu:read32(Game.inBattle) then
-		-- If in battle then we gotta handle that logic
-		if InBattleAddress~=emu:read32(Game.inBattle) then
-            PrintBuffer:print("In Battle Address has changed")
-        end
+    -- need to check if we entered battle and if we are still in battle and when things/turn changes
+    if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattleAddress~=readBattleAddress() then
+        -- console:log(string.format("8-bit: %i", readBattleAddress()))
+        console:log(string.format("Number: %i", readBattleAddress()))
 		printPokeStatus(Game, PrintBuffer, CurrentPokemon)
 		Prev = emu:read32(CurrentPokemon)
 		PrevExp = Game:getPokemonData(CurrentPokemon).experience
 		Frame = Frame + 1
-		InBattleAddress = emu:read32(0x020386B4)
+		InBattleAddress = readBattleAddress()
 		if Frame == 6 then 
             Frame = 0
         end
@@ -451,7 +468,7 @@ function printPokeStatus(game, buffer, pkm)
 	end
 	--]]
 	local currentPokemon = game:getPokemonData(pkm)
-	local inBattle = emu:read32(game.inBattle)
+	local inBattle = readBattleAddress()
 	for i = 1, 4 do
 		local move = currentPokemon.moves[i]
 		-- buffer:print(string.format("Number %i: \n", move))
@@ -511,18 +528,17 @@ function EndSocketConnection()
     end
 end
 
-function send_test()
+function send_test(message)
     if not socket then
         console:error("Socket is not initialized!")
         return
     end
 
-    local testMessage = "Test message from Lua script"
-    local success, err = socket:send(testMessage .. "\r\n")
+    local success, err = socket:send(message .. "\r\n")
     if not success then
         console:error("Failed to send test message: " .. err)
     else
-        console:log("Test message sent successfully.")
+        console:log("Message " .. message .. " , sent successfully.")
     end
 end
 

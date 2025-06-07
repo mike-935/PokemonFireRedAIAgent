@@ -5,6 +5,8 @@ import os
 import platform
 from glob import glob
 
+Communicator = GameCommunicator.GameCommunicator()
+
 # Finds the first .gba file in the Emulator directory and returns its path.
 def find_rom():
     possible_roms = []
@@ -44,7 +46,9 @@ def run_program():
         print(f"Emulator found at: {emulator_path} and ROM found at: {rom_path}")
     else:
         print("Failed to find emulator or ROM")
+        Communicator.close()
         sys.exit()
+
 
     process_args = [emulator_path, "--script",
          script_path, rom_path]
@@ -75,11 +79,23 @@ def create_effect_list():
             effects.append(effect)
     return effects
 
+# Creates the list of Pokémon types from the types.txt file.
+# Each index in the list corresponds to the type of the move at that index.
+def create_move_types_list():
+    types = []
+    with open("types.txt", "r") as types_file:
+        lines = types_file.readlines()
+        for line in lines:
+            move_type_constant = line.split(" ")[0]
+            move_type = move_type_constant.split("_")[1]
+            types.append(move_type)
+    print(f"Move types: {types}")
+    return types
 
-# move_effects = create_effect_list()
+move_effects = create_effect_list()
+move_types = create_move_types_list()
 
 if __name__ == "__main__":
-    Communicator = GameCommunicator.GameCommunicator()
     run_program()
-    create_effect_list()
     Communicator.run()
+    #pass
