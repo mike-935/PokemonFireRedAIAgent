@@ -1,5 +1,5 @@
 import sys
-from Neural_Network.GameCommunicator import Emu_Relay
+from GameCommunicator import Emu_Relay
 import subprocess
 import os
 import platform
@@ -106,6 +106,6 @@ move_effects = create_effect_list()
 move_types = create_move_types_list()
 
 if __name__ == "__main__":
-    #run_program()
+    run_program()
     #Communicator.run()
     pass

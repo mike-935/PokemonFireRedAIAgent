@@ -221,6 +221,12 @@ function GameData.getPokemonData(game, pokemonAddress)
     -- bits of the first substruct
     pokemon.species = substruct0[0] & 0xFFFF
 
+    -- 0x1c is the size of base stats?
+    local addrOffset = game.speciesInfo + (pokemon.species * 0x1C)
+
+    pokemon.type1 = emu:read8(addrOffset + 6)
+    pokemon.type2 = emu:read8(addrOffset + 7)
+
     -- Get the index of each of the 4 moves of the pokemon
     -- moves take up 64 bits of the second substruct
     pokemon.moves = {
@@ -316,6 +322,7 @@ function InitializeGame()
     -- Represents the FireRed rom data
     Game = GameData:new({
         name = "FireRed (USA)",
+
         -- Address for where the first pokemon in the player's party is stored
         playerParty = 0x2024284,
         -- Address that stores the count of pokemon in the player's party (between 1 - 6)
@@ -333,7 +340,9 @@ function InitializeGame()
         -- Address for where the rom stores the move data
         moveData = (0x00250C80 - 12),
         -- Address for where the rom stores the pokemon types
-        romTypesTable = (0x0024F210)
+        romTypesTable = (0x0024F210),
+        -- Has all the info about the pokemon species like types, and base stats
+        speciesInfo = 0x82547F4
     })
     if not Game then
         console:error("Failed to initialize game data!")
@@ -493,7 +502,10 @@ function printPokeStatus(game, buffer, pkm)
 
 		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s\n",
 		i, name, damage, attackType, accuracy, effectID))
-	end	
+	end
+    local type1 = currentPokemon.type1
+	local type2 = currentPokemon.type2
+	buffer:print(string.format("Type 1: %-7s Type 2: %-7s\n", type1, type2))
 	--[[
 	local types = ""
 	for i = 0, 17 do
