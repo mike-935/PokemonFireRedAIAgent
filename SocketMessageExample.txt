@@ -1,0 +1,32 @@
+Command: GENERATE_MOVE
+|
+Player Pokemon
+-
+Pokemon: Wartortle
+Moves:
+Water Gun_40_100_0_0
+Tackle_50_100_0_1
+Bubble_40_100_19_2
+Tail Whip_0_100_70_3
+,
+Stats:
+HP: 51
+Attack: 28
+Defense: 35
+Sp.Atk: 28
+Sp.Def: 36
+Speed: 29
+-
+Pokemon: Rattata
+-
+Pokemon: Pidgey
+-
+
+-
+Pokemon: Metapod
+-
+Pokemon: Weedle
+/
+Opponent Pokemon
+-
+Pokemon: Caterpie

@@ -6,7 +6,7 @@ HOST = "127.0.0.1"
 PORT = 65432
 
 # Communicates with our lua socket to handle messages from the game and send back responses.
-class GameCommunicator:
+class EmuRelay:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((HOST, PORT))

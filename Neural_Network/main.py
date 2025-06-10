@@ -1,27 +1,28 @@
 import sys
-import GameCommunicator
+from Neural_Network.GameCommunicator import Emu_Relay
 import subprocess
 import os
 import platform
 from glob import glob
 
-Communicator = GameCommunicator.GameCommunicator()
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+Communicator = Emu_Relay.EmuRelay()
 
 # Finds the first .gba file in the Emulator directory and returns its path.
 def find_rom():
     possible_roms = []
-    for rom_path in glob('Emulator/**/*.gba', recursive=True):
+    for rom_path in glob('Emulator/**/*.gba', recursive=True, root_dir=root_dir):
         possible_roms.append(rom_path)
-    return possible_roms[0] if possible_roms else None
+    return os.path.join(root_dir, possible_roms[0]) if possible_roms else None
 
 # Finds the first save state file in the Emulator directory and returns its path.
 def find_save():
     possible_saves = []
-    for savefile_path in glob('Emulator/**/*.ss[0-9]', recursive=True):
+    for savefile_path in glob('Emulator/**/*.ss[0-9]', recursive=True, root_dir=root_dir):
         possible_saves.append(savefile_path)
     possible_saves.sort()
     print(possible_saves)
-    return possible_saves[0] if possible_saves else None
+    return os.path.join(root_dir, possible_saves[0]) if possible_saves else None
 
 # Runs the mGBA emulator with the specified ROM and script.
 # If a save state file is found, it will be used; otherwise, the default save state will be used.
@@ -29,7 +30,7 @@ def find_save():
 def run_program():
     emulator_path = ""
     rom_path = find_rom()
-    script_path = "GameData.lua"
+    script_path = "mGBAScripts/GameData.lua"
     save_path = find_save()
     if platform.system() == "Linux":
         emulator_path = "Emulator/mGBA.exe"
@@ -41,11 +42,20 @@ def run_program():
         emulator_path = "Emulator/mGBA.exe"
         print("On Windows")
 
-    if (emulator_path is not None and rom_path is not None
-            and os.path.exists(emulator_path) and os.path.exists(rom_path)):
-        print(f"Emulator found at: {emulator_path} and ROM found at: {rom_path}")
+    emulator_path = os.path.join(root_dir, emulator_path)
+    script_path = os.path.join(root_dir, script_path)
+
+    if emulator_path is not None and os.path.exists(emulator_path):
+        print(f"Emulator found at: {emulator_path}")
     else:
         print("Failed to find emulator or ROM")
+        Communicator.close()
+        sys.exit()
+
+    if rom_path is not None and os.path.exists(rom_path):
+        print(f"ROM found at: {rom_path}")
+    else:
+        print("Failed to find ROM")
         Communicator.close()
         sys.exit()
 
@@ -72,7 +82,7 @@ def run_program():
 # Each index in the list corresponds to the effect of the move at that index.
 def create_effect_list():
     effects = []
-    with open("move_effects.txt", "r") as move_effects_file:
+    with open("../constants/move_effects.txt", "r") as move_effects_file:
         lines = move_effects_file.readlines()
         for line in lines:
             effect = line.split(" ")[0]
@@ -83,13 +93,11 @@ def create_effect_list():
 # Each index in the list corresponds to the type of the move at that index.
 def create_move_types_list():
     types = []
-    with open("types.txt", "r") as types_file:
+    with open("../constants/types.txt", "r") as types_file:
         lines = types_file.readlines()
         for line in lines:
-            move_type_constant = line.split(" ")[0]
-            move_type = move_type_constant.split("_")[1]
+            move_type = line.split(" ")[0]
             types.append(move_type)
-    print(f"Move types: {types}")
     return types
 
 move_effects = create_effect_list()
@@ -97,5 +105,5 @@ move_types = create_move_types_list()
 
 if __name__ == "__main__":
     run_program()
-    Communicator.run()
-    #pass
+    #Communicator.run()
+    pass
