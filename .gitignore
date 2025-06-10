@@ -176,3 +176,5 @@ cython_debug/
 # Emulator stuff
 /Emulator
 .idea/
+
+.DS_Store
