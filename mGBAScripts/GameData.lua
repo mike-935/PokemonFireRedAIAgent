@@ -74,6 +74,7 @@ GBA_KEY = {
     L = 9
 }
 
+
 -- Character map for converting byte values to characters
 GameData.charmap = { [0]=
 	" ", "À", "Á", "Â", "Ç", "È", "É", "Ê", "Ë", "Ì", "こ", "Î", "Ï", "Ò", "Ó", "Ô",
@@ -132,7 +133,7 @@ function GameData.getMoveType(game, moveID)
 	local attackTypeNumber = emu.memory.cart0:read8(attackTypeID)
 	-- with the type's id, look in the rom's type table to find the type name
 	local attackTypeAddress = game.romTypesTable + (attackTypeNumber * 7)
-	return game:toString(emu.memory.cart0:readRange(attackTypeAddress, 6))
+	return emu.memory.cart0:readRange(attackTypeAddress, 6)
 end
 
 -- Gets the type ID of the given move
@@ -353,6 +354,118 @@ function readBattleAddress()
     return emu:read8(Game.battleAddress)
 end
 
+-- Temp, didn't test
+function GameData.getBattlersCount(game)
+    -- This function reads the number of battlers in the current battle
+    return emu:read8(Game.battlersCount)
+end
+
+function GameData.requestAIMove(game, currentPokemon)
+    console:log("Requesting AI move for current Pokemon...")
+    local command = "REQUEST_AI_MOVE,"
+    if not currentPokemon or currentPokemon == nil then
+        console:error("Current Pokemon is nil when requesting ai move!")
+        return
+    end
+    local pokemonData = game:formatPokemonData(currentPokemon)
+    command = command .. pokemonData
+    console:log("Sending AI move request with data: " .. command)
+    SendMessageToServer(command)
+    console:log("Finished sending AI move request.")
+end
+
+function GameData.formatPokemonData(game, playerPokemon)
+    -- Player pokemon:
+    -- type, type2, level, currenthp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
+    -- Opponent Pokemon (appended to the end of above):
+    -- type, type2, level, currenthp, hp, atk, def, spatk, spdef, spd
+
+    -- Get all the pokemon's moves in a table in the format:
+    -- moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
+    local moves = {}
+    for i = 1, 4 do
+        local moveData = game:moveAsList(playerPokemon, i)
+        for _, v in ipairs(moveData) do
+            table.insert(moves, v)
+        end
+    end
+
+
+    -- Get all the player pokemon's data in the format of:
+    -- type, type2, level, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
+    local playerPokemonData = {
+        playerPokemon.type1,
+        playerPokemon.type2,
+        playerPokemon.level,
+        playerPokemon.hp,
+    }
+
+    -- Add the stats of the player pokemon
+    for i = 1,6 do
+        table.insert(playerPokemonData, playerPokemon.stats[i])
+    end
+
+    -- Add the moves of the player pokemon
+    for _,moveData in ipairs(moves) do
+        table.insert(playerPokemonData, moveData)
+    end
+
+
+    -- get the opponent pokemon and its data
+    local opponentPokemon = game:getPokemonData(Game.enemyParty)
+
+    -- format the opponent pokemon as:
+    -- type, type2, level, hp, atk, def, spatk, spdef, spd
+    local opponentPokemonData = {
+        opponentPokemon.type1,
+        opponentPokemon.type2,
+        opponentPokemon.level,
+        opponentPokemon.hp,
+        table.unpack(opponentPokemon.stats),
+    }
+
+    -- combine tables
+    console:log(string.format("Before Player pokemon data size is: %i", #playerPokemonData))
+    for _,data in ipairs(opponentPokemonData) do
+        table.insert(playerPokemonData, data)
+    end
+    console:log(string.format("After Player pokemon data size is: %i", #playerPokemonData))
+
+    local stringFormat = ""
+    for _,data in ipairs(playerPokemonData) do
+        stringFormat = stringFormat .. "%d,"
+    end
+
+    -- Remove the last comma
+    stringFormat = string.sub(stringFormat, 1, -2)
+
+
+    for i, v in ipairs(playerPokemonData) do
+        console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
+    end
+
+    local pokemonData = string.format(
+        stringFormat,
+        table.unpack(playerPokemonData)
+    )
+    return pokemonData
+end
+
+function GameData.moveAsList(game, pokemon, index)
+    -- This function returns the move data as a list
+    local moveID = pokemon.moves[index]
+    local moveData = {
+        moveID,
+        game:getMoveEffectID(moveID),
+        game:getMoveTypeID(moveID),
+        pokemon.movesDamage[index],
+        pokemon.movesAccuracy[index],
+        pokemon.pp[index]
+    }
+    console:log(string.format("Move %i: %s", index, table.concat(moveData, ", ")))
+    return moveData
+end
+
 -- This is the start of functionality associated the the mGBA emulator
 
 function InitializeGame()
@@ -379,7 +492,9 @@ function InitializeGame()
         -- Address for where the rom stores the pokemon types
         romTypesTable = (0x0024F210),
         -- Has all the info about the pokemon species like types, and base stats
-        speciesInfo = 0x82547F4
+        speciesInfo = 0x82547F4,
+        -- Count of battlers
+        battlersCount = 0x2023BCC
     })
     if not Game then
         console:error("Failed to initialize game data!")
@@ -400,7 +515,8 @@ function InitializeGame()
     CurrentSelectedPokemon = 1
     LastPressedKey = nil
     initializeSocketConnection()
-
+    UseBattleAI = false
+    BattleAIThinking = false
     InBattleAddress = readBattleAddress()
     console:log("Game initialized successfully!")
 end
@@ -412,6 +528,9 @@ function ResetGame()
     Frame = 0
     CurrentSelectedPokemon = 1
     LastPressedKey = nil
+    UseBattleAI = false
+    BattleAIThinking = false
+    InBattleAddress = readBattleAddress()
     -- Probably don't have to but lets reset the connection
     if socket then
         socket:close()
@@ -420,26 +539,43 @@ function ResetGame()
     initializeSocketConnection()
 end
 
+HEX_KEYS = {
+    RIGHT = 0x10,
+    LEFT = 0x20,
+    UP = 0x40,
+    DOWN = 0x80,
+    START = 0x08,
+    A_X = 0x01,
+    B_Z = 0x02,
+}
+
 function Input()
-    local right = 0x10
-    local start = 0x08
-    local left = 0x20
-    local right_start = 0x18
-    local left_start = 0x28
     local selectedKey = emu:getKeys()
     local partyCount = emu:read8(Game.partyCount)
     if selectedKey ~= LastPressedKey then
+        -- console:log(string.format("Current Selected Key: 0x%02X", selectedKey))
         LastPressedKey = selectedKey
-        if LastPressedKey == right_start then
+        if LastPressedKey == (HEX_KEYS.RIGHT | HEX_KEYS.START) then
             CurrentSelectedPokemon = CurrentSelectedPokemon + 1
             if CurrentSelectedPokemon > partyCount then
                 CurrentSelectedPokemon = 0
             end
-        elseif LastPressedKey == left_start then
+        elseif LastPressedKey == (HEX_KEYS.LEFT | HEX_KEYS.START) then
             CurrentSelectedPokemon = CurrentSelectedPokemon - 1
             if CurrentSelectedPokemon < 1 then
                 CurrentSelectedPokemon = partyCount
             end
+        elseif LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.RIGHT) then
+            console:log("Pressed Activate AI")
+            UseBattleAI = true
+        elseif LastPressedKey == (HEX_KEYS.B_Z | HEX_KEYS.LEFT) then
+            if BattleAIThinking then
+                console:log("Battle AI is thinking! Unable to cancel while in progress.")
+            else
+                console:log("Pressed Deactivate AI")
+                UseBattleAI = false
+            end
+
         end
     end
 end
@@ -476,13 +612,33 @@ function Update()
     if InBattleAddress ~= readBattleAddress() and readBattleAddress() == 0 then
         console:log("First entering battle!")
         InBattleAddress = readBattleAddress()
-        return
     end
+
+    if UseBattleAI then
+        if not BattleAIThinking then
+            console:log("AI will attempt to make a move!")
+            BattleAIThinking = true
+            playerPokemon = Game:getPokemonData(CurrentPokemon)
+            Game:requestAIMove(playerPokemon)
+            -- On message receive turn off BattleAIThinking
+        end
+    end
+
+    --[[
+    if readBattleAddress() == 0 and UseBattleAI then
+        if not BattleAIThinking then
+            console:log("AI will attempt to make a move!")
+            BattleAIThinking = true
+            Game:requestAIMove(CurrentPokemon)
+            -- On message receive turn off BattleAIThinking
+        end
+    end
+    --]]
 
     -- need to check if we entered battle and if we are still in battle and when things/turn changes
     if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattleAddress~=readBattleAddress() then
         -- console:log(string.format("8-bit: %i", readBattleAddress()))
-        console:log(string.format("Number: %i", readBattleAddress()))
+        -- console:log(string.format("Number: %i", readBattleAddress()))
 		printPokeStatus(Game, PrintBuffer, CurrentPokemon)
 		Prev = emu:read32(CurrentPokemon)
 		PrevExp = Game:getPokemonData(CurrentPokemon).experience
@@ -517,7 +673,7 @@ function printPokeStatus(game, buffer, pkm)
 	local inBattle = readBattleAddress()
 	for i = 1, 4 do
 		local move = currentPokemon.moves[i]
-		-- buffer:print(string.format("Number %i: \n", move))
+		buffer:print(string.format("Move Number %i: \n", move))
 		--
 		local moveName = game.moveNames + (currentPokemon.moves[i] * 13)
 	    local name = game:toString(emu.memory.cart0:readRange(moveName, 12))
@@ -591,19 +747,18 @@ function send_test(message)
     end
 end
 
-function SendMessageToServer(game, message)
-    if not socket or not message then
-        console:error("Unable to send message!")
+function SendMessageToServer(message)
+    if not socket then
+        console:error("Unable to send message because socket is invalid!")
         return
     end
 
-    local commandString = game.generateCommandString(Game, message)
-    if not commandString then
-        console:error("Failed to generate command string!")
+    if message == nil then
+        console:error("Given invalid message!")
         return
     end
 
-    local success, err = socket:send(commandString .. "\r\n")
+    local success, err = socket:send(message .. "\r\n")
     if not success then
         console:error("Failed to send command: " .. err)
     else

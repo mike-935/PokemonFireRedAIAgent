@@ -1,6 +1,7 @@
 #!/usr/bin/env -S python3 -u
 
 import argparse, socket, json, select, sys
+import GameTranslator
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -11,6 +12,7 @@ class EmuRelay:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((HOST, PORT))
         self.port = self.socket.getsockname()[1]
+        self.GameTranslator = GameTranslator.GameTranslator()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server
@@ -47,12 +49,15 @@ class EmuRelay:
                 while True:
                     data = self.recieve_message(connection)
                     if data:
+                        print('We read:', data)
+                        self.parse_input(data)
+                        '''
                         command, value = input("Enter command and value: ").split()
                         if command == "PRESS_KEY":
                             self.send_button(connection, value + "\r\n")
                         if command == "RELEASE_KEY":
                             self.send_button_release(connection, value + "\r\n")
-                        print('We read:', data)
+                        '''
 
         except (KeyboardInterrupt, SystemExit) as e:
             print("Exiting gracefully...")
@@ -64,7 +69,14 @@ class EmuRelay:
         self.socket.close()
         
     def parse_input(self, data):
-        pass
+        split_data = data.split(",")
+        match split_data[0]:
+            case "REQUEST_AI_MOVE":
+                formated_data = self.GameTranslator.translate(split_data)
+                return
+            case _:
+                print("Unsupported command:", split_data[0])
+                return
         
         
 
