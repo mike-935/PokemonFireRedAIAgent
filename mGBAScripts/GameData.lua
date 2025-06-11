@@ -128,7 +128,7 @@ end
 -- Gets the type of the given move
 function GameData.getMoveType(game, moveID)
     -- first get the id relating to the type for this move
-    local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
+    local attackTypeID = game.moveData + (moveID * 12) + 2
 	local attackTypeNumber = emu.memory.cart0:read8(attackTypeID)
 	-- with the type's id, look in the rom's type table to find the type name
 	local attackTypeAddress = game.romTypesTable + (attackTypeNumber * 7)
@@ -138,13 +138,13 @@ end
 -- Gets the type ID of the given move
 function GameData.getMoveTypeID(game, moveID)
     -- first get the id relating to the type for this move
-    local attackTypeID = game.moveData + (currentPokemon.moves[i] * 12) + 2
+    local attackTypeID = game.moveData + (moveID * 12) + 2
 	return emu.memory.cart0:read8(attackTypeID)
 end
 
 -- Gets the accuracy of the given move
 function GameData.getMoveAccuracy(game, moveID)
-    local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
+    local accuracyAddress = game.moveData + (moveID * 12) + 3
 	return emu.memory.cart0:read8(accuracyAddress)
 end
 
@@ -242,6 +242,31 @@ function GameData.getPokemonData(game, pokemonAddress)
 		substruct1[1] >> 16
 	}
 
+    pokemon.movesDamage = {}
+    for i = 1, 4 do
+        local moveID = pokemon.moves[i]
+        local damage = game:getMoveDamage(moveID)
+
+        table.insert(pokemon.movesDamage, damage)
+    end
+
+    pokemon.movesType = {}
+    for i = 1, 4 do
+        local moveID = pokemon.moves[i]
+        local moveType = game:getMoveType(moveID)
+
+        table.insert(pokemon.movesType, moveType)
+    end 
+
+    pokemon.movesAccuracy = {}
+    for i = 1, 4 do
+        local moveID = pokemon.moves[i]
+        local moveAccuracy = game:getMoveAccuracy(moveID)
+
+        table.insert(pokemon.movesAccuracy, moveAccuracy)
+    end
+    
+
     -- get the remaining pp for each of the 4 moves
     -- moves take up the last 32 bits of the second substruct
     pokemon.pp = {
@@ -279,7 +304,19 @@ function GameData.getPokemonData(game, pokemonAddress)
 		(substruct2[1] >> 8) & 0xFF,
 	}
     return pokemon
+end
 
+local function formatPokemonData(pokemon)
+    -- type, type2, level, hp, atk, def, spatk, spdef, spd, move1, move2, move3, move4, pp1, pp2, pp3, pp4, moveatk1, moveatk2, moveatk3, moveatk4, movetype1, movetype2, movetype3, movetype4, accuracy1, accuracy2, accuracy3, accuracy4
+    local data = string.format(
+        "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+        pokemon.level,
+        pokemon.hp,
+        table.unpack(pokemon.stats),
+        table.unpack(pokemon.moves),
+        table.unpack(pokemon.pp)
+    )
+    return data
 end
 
 
