@@ -1,7 +1,8 @@
 #!/usr/bin/env -S python3 -u
 
 import argparse, socket, json, select, sys
-import GameTranslator
+
+from Neural_Network.GameCommunicator.GameTranslator import GameTranslator
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -12,7 +13,7 @@ class EmuRelay:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((HOST, PORT))
         self.port = self.socket.getsockname()[1]
-        self.GameTranslator = GameTranslator.GameTranslator()
+        self.GameTranslator = GameTranslator()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server

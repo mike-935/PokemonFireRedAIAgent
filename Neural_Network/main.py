@@ -3,6 +3,7 @@ from GameCommunicator import Emu_Relay
 import subprocess
 import os
 import platform
+
 from glob import glob
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -107,5 +108,4 @@ move_types = create_move_types_list()
 
 if __name__ == "__main__":
     run_program()
-    Communicator.run()
-    pass
+    # Communicator.run()

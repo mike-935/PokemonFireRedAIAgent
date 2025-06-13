@@ -400,9 +400,27 @@ function GameData.formatPokemonData(game, playerPokemon)
         playerPokemon.hp,
     }
 
+    local playerStartAddress = Game.playerBattleStruct + 24
+    local playerStatStages = {
+        -- hp
+        emu:read8(playerStartAddress),
+        -- attack
+        emu:read8(playerStartAddress + 1),
+        -- defense
+        emu:read8(playerStartAddress + 2),
+        -- Sp.Atk
+        emu:read8(playerStartAddress + 3),
+        -- Sp.Def
+        emu:read8(playerStartAddress + 4),
+        -- Spd
+        emu:read8(playerStartAddress + 5),
+        -- Accuracy
+        -- Evasion
+    }
+
     -- Add the stats of the player pokemon
     for i = 1,6 do
-        table.insert(playerPokemonData, playerPokemon.stats[i])
+        table.insert(playerPokemonData, getEffectiveStat(playerPokemon.stats[i], playerStatStages[i] - 6))
     end
 
     -- Add the moves of the player pokemon
@@ -414,6 +432,24 @@ function GameData.formatPokemonData(game, playerPokemon)
     -- get the opponent pokemon and its data
     local opponentPokemon = game:getPokemonData(Game.enemyParty)
 
+    local opposingStatStageAddress = Game.opposingBattleStruct + 24
+    local opponentPokemonStatStages = {
+        -- hp
+        emu:read8(opposingStatStageAddress),
+        -- attack
+        emu:read8(opposingStatStageAddress + 1),
+        -- defense
+        emu:read8(opposingStatStageAddress + 2),
+        -- Sp.Atk
+        emu:read8(opposingStatStageAddress + 3),
+        -- Sp.Def
+        emu:read8(opposingStatStageAddress + 4),
+        -- Spd
+        emu:read8(opposingStatStageAddress + 5),
+        -- Accuracy
+        -- Evasion
+    }
+
     -- format the opponent pokemon as:
     -- type, type2, level, hp, atk, def, spatk, spdef, spd
     local opponentPokemonData = {
@@ -421,8 +457,13 @@ function GameData.formatPokemonData(game, playerPokemon)
         opponentPokemon.type2,
         opponentPokemon.level,
         opponentPokemon.hp,
-        table.unpack(opponentPokemon.stats),
     }
+
+     -- Add the stats of the opposing pokemon
+    for i = 1,6 do
+        table.insert(opponentPokemonData,
+        getEffectiveStat(opponentPokemon.stats[i], opponentPokemonStatStages[i] - 6))
+    end
 
     -- combine tables
     console:log(string.format("Before Player pokemon data size is: %i", #playerPokemonData))
@@ -466,6 +507,33 @@ function GameData.moveAsList(game, pokemon, index)
     return moveData
 end
 
+function getEffectiveStat(base, stage)
+    if base == nil or stage == nil then
+        console:error("Base or stage is nil in getEffectiveStat!")
+        return 0
+    end
+    local stageMultipliers = {
+        [-6] = 2/8, [-5] = 2/7, [-4] = 2/6, [-3] = 2/5, [-2] = 2/4, [-1] = 2/3,
+        [0]  = 1.0,
+        [1]  = 3/2, [2] = 4/2, [3] = 5/2, [4] = 6/2, [5] = 7/2, [6] = 8/2,
+    }
+    return base * stageMultipliers[stage]
+end
+
+function getEffectiveAccuracyEvasionStat(base, stage)
+    if base == nil or stage == nil then
+        console:error("Base or stage is nil in getEffectiveStat!")
+        return 0
+    end
+    local stageMultipliers = {
+        [-6] = 2/8, [-5] = 2/7, [-4] = 2/6, [-3] = 2/5, [-2] = 2/4, [-1] = 2/3,
+        [0]  = 1.0,
+        [1]  = 3/2, [2] = 4/2, [3] = 5/2, [4] = 6/2, [5] = 7/2, [6] = 8/2,
+    }
+    return base * stageMultipliers[stage]
+end
+
+
 -- This is the start of functionality associated the the mGBA emulator
 
 function InitializeGame()
@@ -494,7 +562,11 @@ function InitializeGame()
         -- Has all the info about the pokemon species like types, and base stats
         speciesInfo = 0x82547F4,
         -- Count of battlers
-        battlersCount = 0x2023BCC
+        battlersCount = 0x2023BCC,
+        -- A
+        playerBattleStruct = 0x2023BE4,
+        --
+        opposingBattleStruct = 0x2023C3D,
     })
     if not Game then
         console:error("Failed to initialize game data!")
@@ -565,7 +637,7 @@ function Input()
             if CurrentSelectedPokemon < 1 then
                 CurrentSelectedPokemon = partyCount
             end
-        elseif LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.RIGHT) then
+        elseif (LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.RIGHT) and readBattleAddress() == 0) then
             console:log("Pressed Activate AI")
             UseBattleAI = true
         elseif LastPressedKey == (HEX_KEYS.B_Z | HEX_KEYS.LEFT) then
@@ -575,7 +647,19 @@ function Input()
                 console:log("Pressed Deactivate AI")
                 UseBattleAI = false
             end
-
+        elseif LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.B_Z) then
+            console:log("Pressed A and B")
+            local startAddress = Game.opposingBattleStruct + 24
+            local statStages = {
+                HP = emu:read8(startAddress),
+                Attack = emu:read8(startAddress + 1),
+                Defense = emu:read8(startAddress + 2),
+                Speed = emu:read8(startAddress + 3),
+                SpAtk = emu:read8(startAddress + 4),
+                SpDef = emu:read8(startAddress + 5),
+            }
+            console:log(string.format("Stat Stages: HP: %d, Attack: %d, Defense: %d, Speed: %d, SpAtk: %d, SpDef: %d",
+                statStages.HP, statStages.Attack, statStages.Defense, statStages.Speed, statStages.SpAtk, statStages.SpDef))
         end
     end
 end
