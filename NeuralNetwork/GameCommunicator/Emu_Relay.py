@@ -1,8 +1,8 @@
 #!/usr/bin/env -S python3 -u
 
-import argparse, socket, json, select, sys
+import socket
 
-from Neural_Network.GameCommunicator.GameTranslator import GameTranslator
+from .GameTranslator import GameTranslator
 
 HOST = "127.0.0.1"
 PORT = 65432
