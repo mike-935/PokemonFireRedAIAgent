@@ -108,4 +108,4 @@ move_types = create_move_types_list()
 
 if __name__ == "__main__":
     run_program()
-    # Communicator.run()
+    Communicator.run()
