@@ -354,6 +354,16 @@ function readBattleAddress()
     return emu:read8(Game.battleAddress)
 end
 
+-- Get the turn count of the current battle
+function getTurnCount()
+    return emu:read8(Game.turnCount)
+end
+
+-- Get the last used move ID in the current battle
+function getLastUsedMoveID()
+    return emu:read8(Game.lastUsedMove)
+end
+
 -- Temp, didn't test
 function GameData.getBattlersCount(game)
     -- This function reads the number of battlers in the current battle
@@ -567,6 +577,12 @@ function InitializeGame()
         playerBattleStruct = 0x2023BE4,
         --
         opposingBattleStruct = 0x2023C3D,
+        --
+        battleResults = 0x3004F90,
+        -- Address for the current battle's turn count
+        turnCount = 0x3004FA3,
+        -- Address for the last used move in the current battle
+        lastUsedMove = 0x3004FB2,
     })
     if not Game then
         console:error("Failed to initialize game data!")
@@ -585,6 +601,8 @@ function InitializeGame()
 			[6] = {"POKEMON 6", Game.playerParty + 500},
 		}
     CurrentSelectedPokemon = 1
+    CurrentMoveIndex = 0
+    CurrentTurn = 0
     LastPressedKey = nil
     initializeSocketConnection()
     UseBattleAI = false
@@ -647,19 +665,6 @@ function Input()
                 console:log("Pressed Deactivate AI")
                 UseBattleAI = false
             end
-        elseif LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.B_Z) then
-            console:log("Pressed A and B")
-            local startAddress = Game.opposingBattleStruct + 24
-            local statStages = {
-                HP = emu:read8(startAddress),
-                Attack = emu:read8(startAddress + 1),
-                Defense = emu:read8(startAddress + 2),
-                Speed = emu:read8(startAddress + 3),
-                SpAtk = emu:read8(startAddress + 4),
-                SpDef = emu:read8(startAddress + 5),
-            }
-            console:log(string.format("Stat Stages: HP: %d, Attack: %d, Defense: %d, Speed: %d, SpAtk: %d, SpDef: %d",
-                statStages.HP, statStages.Attack, statStages.Defense, statStages.Speed, statStages.SpAtk, statStages.SpDef))
         end
     end
 end
@@ -698,6 +703,11 @@ function Update()
         InBattleAddress = readBattleAddress()
     end
 
+    if CurrentTurn ~= getTurnCount() then
+        console:log(string.format("Turn Changed, Current Turn: %i, Previous Turn: %i, Last Used Move ID: %i", getTurnCount(), CurrentTurn, getLastUsedMoveID()))
+        CurrentTurn = getTurnCount()
+    end
+
     if UseBattleAI then
         if not BattleAIThinking then
             console:log("AI will attempt to make a move!")
@@ -707,6 +717,8 @@ function Update()
             -- On message receive turn off BattleAIThinking
         end
     end
+
+
 
     --[[
     if readBattleAddress() == 0 and UseBattleAI then
