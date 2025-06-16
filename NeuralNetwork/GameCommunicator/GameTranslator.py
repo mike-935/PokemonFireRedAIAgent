@@ -3,7 +3,7 @@ import os
 
 class GameTranslator:
     def __init__(self):
-        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         self.move_effects = self.create_effect_list()
         self.move_types = self.create_move_types_list()
 

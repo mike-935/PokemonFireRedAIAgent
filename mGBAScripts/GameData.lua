@@ -149,6 +149,25 @@ function GameData.getMoveAccuracy(game, moveID)
 	return emu.memory.cart0:read8(accuracyAddress)
 end
 
+--[[
+Gets the target of the given move
+Values are:
+---------------------------------
+0x00	Selected target         |
+0x01	Depends on the attack   |
+0x02	Unused                  |
+0x04	Random target           |
+0x08	Both foes               |
+0x10	User                    |
+0x20	Both foes and partner   |
+0x40	Opponent field          |
+---------------------------------
+--]]
+function GameData.getMoveTarget(game, moveID)
+    local damageAddress = game.moveData + (moveID * 12) + 6
+	return emu.memory.cart0:read8(damageAddress)
+end
+
 -- Reads the address of a Pokemon in the player's party and collects the pokemon data
 function GameData.getPokemonData(game, pokemonAddress)
     local pokemon = {}
@@ -266,6 +285,8 @@ function GameData.getPokemonData(game, pokemonAddress)
 
         table.insert(pokemon.movesAccuracy, moveAccuracy)
     end
+
+
     
 
     -- get the remaining pp for each of the 4 moves
@@ -789,8 +810,10 @@ function printPokeStatus(game, buffer, pkm)
 		local accuracyAddress = game.moveData + (currentPokemon.moves[i] * 12) + 3
 		local accuracy = emu.memory.cart0:read8(accuracyAddress)
 
-		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s\n",
-		i, name, damage, attackType, accuracy, effectID))
+		local target = game:getMoveTarget(currentPokemon.moves[i])
+
+		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s, Target: 0x%02X\n",
+		i, name, damage, attackType, accuracy, effectID, target))
 	end
     local type1 = currentPokemon.type1
 	local type2 = currentPokemon.type2
