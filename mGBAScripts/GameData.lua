@@ -508,6 +508,7 @@ function GameData.formatPokemonData(game, playerPokemon, trainingMode)
         stringFormat,
         table.unpack(playerPokemonData)
     )
+
     return pokemonData
 end
 
@@ -720,7 +721,7 @@ function Update()
                 console:log("Sending turn data...")
                 BattleAIThinking = true
                 playerPokemon = Game:getPokemonData(CurrentPokemon)
-                Game:requestAIMove(playerPokemon, true)
+                Game:requestAIMove(playerPokemon, false)
                 console:log("Turn Data sent!")
                 -- On message receive turn off BattleAIThinking
             end

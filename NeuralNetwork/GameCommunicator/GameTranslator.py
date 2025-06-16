@@ -1,6 +1,20 @@
 import torch
 import os
 
+#0 command                  12 moveID2                  24 moveDmg2             36 OppType2
+#1 type1                    13 moveID3                  25 moveDmg3             37 OppLevel
+#2 type21                   14 moveID4                  26 moveDmg4             38 OppCurrentHP
+#3 level                    15 moveEffectID1            27 moveAccuracy1        39 OppHP
+#4 current hp               16 moveEffectID2            28 moveAccuracy2        40 OppAtk
+#5 hp                       17 moveEffectID3            29 moveAccuracy3        41 OppDef
+#6 atk                      18 moveEffectID4            30 moveAccuracy4        42 OppSpatk
+#7 def                      19 moveType1                31 movePP1              43 OppSpDef
+#8 spatk                    20 moveType2                32 movePP2              44 OppSpe
+#9 spdef                    21 moveType3                33 movePP3
+#10 spd                     22 moveType4                34 movePP4
+#11 moveID1                 23 moveDmg1                 35 OppType1
+
+# type, type2, level, currenthp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
 class GameTranslator:
     def __init__(self):
         self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))

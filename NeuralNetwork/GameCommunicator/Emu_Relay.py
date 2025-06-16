@@ -5,6 +5,8 @@ import torch
 
 from .GameTranslator import GameTranslator
 
+from .GameTranslatorPandas import GameTranslatorPandas
+
 HOST = "127.0.0.1"
 PORT = 65432
 
@@ -15,6 +17,7 @@ class EmuRelay:
         self.socket.bind((HOST, PORT))
         self.port = self.socket.getsockname()[1]
         self.GameTranslator = GameTranslator()
+        self.GameTranslatorPandas = GameTranslatorPandas()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server
@@ -74,11 +77,14 @@ class EmuRelay:
         split_data = data.split(",")
         match split_data[0]:
             case "REQUEST_AI_MOVE":
-                formatted_data = self.GameTranslator.translate(split_data)
-                tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
+                formatted_data = self.GameTranslatorPandas.translate(split_data)
+                print("formatted data", formatted_data)
+                #formatted_data = self.GameTranslator.translate(split_data)
+                #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
                 return
             case "SAVE_MOVE":
-                formatted_data = self.GameTranslator.translate(split_data, True)
+                formatted_data = self.GameTranslatorPandas.translate(split_data)
+                #formatted_data = self.GameTranslator.translate(split_data, True)
                 print("Here is the formatted data to save:", formatted_data)
                 return
             case _:
