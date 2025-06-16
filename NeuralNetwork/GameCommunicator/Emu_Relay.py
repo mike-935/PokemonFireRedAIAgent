@@ -1,6 +1,7 @@
 #!/usr/bin/env -S python3 -u
 
 import socket
+import torch
 
 from .GameTranslator import GameTranslator
 
@@ -73,7 +74,12 @@ class EmuRelay:
         split_data = data.split(",")
         match split_data[0]:
             case "REQUEST_AI_MOVE":
-                formated_data = self.GameTranslator.translate(split_data)
+                formatted_data = self.GameTranslator.translate(split_data)
+                tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
+                return
+            case "SAVE_MOVE":
+                formatted_data = self.GameTranslator.translate(split_data, True)
+                print("Here is the formatted data to save:", formatted_data)
                 return
             case _:
                 print("Unsupported command:", split_data[0])

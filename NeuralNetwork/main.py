@@ -79,32 +79,6 @@ def run_program():
         text=True
     )
 
-# Creates the list of Pokémon move effects from the move_effects.txt file.
-# Each index in the list corresponds to the effect of the move at that index.
-def create_effect_list():
-    effects = []
-    effects_path = os.path.join(root_dir,"constants/move_effects.txt")
-    with open(effects_path, "r") as move_effects_file:
-        lines = move_effects_file.readlines()
-        for line in lines:
-            effect = line.split(" ")[0]
-            effects.append(effect)
-    return effects
-
-# Creates the list of Pokémon types from the types.txt file.
-# Each index in the list corresponds to the type of the move at that index.
-def create_move_types_list():
-    types = []
-    types_path = os.path.join(root_dir, "constants/types.txt")
-    with open(types_path, "r") as types_file:
-        lines = types_file.readlines()
-        for line in lines:
-            move_type = line.split(" ")[0]
-            types.append(move_type)
-    return types
-
-move_effects = create_effect_list()
-move_types = create_move_types_list()
 
 if __name__ == "__main__":
     run_program()

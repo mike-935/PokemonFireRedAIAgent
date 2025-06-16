@@ -1,8 +1,14 @@
 import torch
+import os
 
 class GameTranslator:
-    def translate(self, message):
-        battle_data = list(map(int, message[1:]))  # Convert all elements to integers
+    def __init__(self):
+        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.move_effects = self.create_effect_list()
+        self.move_types = self.create_move_types_list()
+
+    def translate(self, message, training=False):
+        battle_data = list(map(float, message[1:]))  # Convert all elements to integers
         formatted_data = []
         # battle_data (command, type1, type2, )
         pkm1Type1 = [0] * 18
@@ -95,7 +101,11 @@ class GameTranslator:
         formatted_data.append(battle_data[41] / 2016)
         formatted_data.append(battle_data[42] / 2456)
         formatted_data.append(battle_data[43] / 2016)
-        return torch.tensor(formatted_data, dtype=torch.float32)
+
+        if training:
+            formatted_data.append(battle_data[44])
+
+        return formatted_data
 
     def format_moves(self, index, formatted_data, battle_data):
         offset = 6 * index
@@ -110,3 +120,27 @@ class GameTranslator:
         formatted_data.append(battle_data[13 + offset] / 215)
         formatted_data.append(battle_data[14 + offset] / 100)
         formatted_data.append(1 if battle_data[15 + offset] > 0 else 0)
+
+    # Creates the list of Pokémon move effects from the move_effects.txt file.
+    # Each index in the list corresponds to the effect of the move at that index.
+    def create_effect_list(self):
+        effects = []
+        effects_path = os.path.join(self.root_dir, "constants/move_effects.txt")
+        with open(effects_path, "r") as move_effects_file:
+            lines = move_effects_file.readlines()
+            for line in lines:
+                effect = line.split(" ")[0]
+                effects.append(effect)
+        return effects
+
+    # Creates the list of Pokémon types from the types.txt file.
+    # Each index in the list corresponds to the type of the move at that index.
+    def create_move_types_list(self):
+        types = []
+        types_path = os.path.join(self.root_dir, "constants/types.txt")
+        with open(types_path, "r") as types_file:
+            lines = types_file.readlines()
+            for line in lines:
+                move_type = line.split(" ")[0]
+                types.append(move_type)
+        return types
