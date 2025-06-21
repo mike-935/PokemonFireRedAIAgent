@@ -378,7 +378,36 @@ function GameData.sendTrainingData(game, currentPokemon)
     console:log("Sending to Python the turn to be saved...")
 
     local command = "SAVE_MOVE,"
+    local battleData = {table.unpack(TurnData)}
+    for i = 2, 6 do
+        local partyPokemon = game:getPokemonData(Pokemon[i][2])
+        local formattedPartyPokemon = game:formatPlayerPokemon(partyPokemon, false)
+        for _, v in ipairs(formattedPartyPokemon) do
+            table.insert(battleData, v)
+        end
+    end
+
     local playerDecision = game:getTurnDecision(currentPokemon)
+    table.insert(battleData, playerDecision)
+
+    local stringFormat = ""
+    for _,data in ipairs(battleData) do
+        stringFormat = stringFormat .. "%s,"
+    end
+
+    -- Remove the last comma
+    stringFormat = string.sub(stringFormat, 1, -2)
+
+
+    for i, v in ipairs(battleData) do
+        console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
+    end
+
+
+    local pokemonData = string.format(
+        stringFormat,
+        table.unpack(battleData)
+    )
 
     console:log("Sending turn data: " .. command)
     -- SendMessageToServer(command)
@@ -412,8 +441,8 @@ function GameData.getTurnDecision(game, currentPokemon)
             console:error("Current Pokemon is the same as the old Pokemon, this should not happen!")
         end
         -- if the pokemon switched, we return index + 3 to indicate a switch
-        console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 2))
-        decision = leftOwn + 2
+        console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 3))
+        decision = leftOwn + 3
     else
         console:log("Chosen move index is: " .. chosenMoveIndex)
         decision = chosenMoveIndex
@@ -487,9 +516,10 @@ function GameData.formatPokemonData(game, playerPokemon, trainingMode)
     -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
     -- Second is the Opponent Pokemon (appended to the end of above):
     -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd
+    -- 46 is last of opponent (spd)
 
     -- After the opponent pokemon we add each of the player's other pokemon in the format
-    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, switchable
+    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, switchable (58)
 
     -- And att the end we have the chosen move index or if you switched
 
