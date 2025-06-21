@@ -475,7 +475,7 @@ function GameData.requestAIMove(game, currentPokemon, trainingMode)
     local pokemonData = game:formatPokemonData(currentPokemon, trainingMode)
     command = command .. pokemonData
     console:log("Sending AI move request with data: " .. command)
-    -- SendMessageToServer(command)
+    SendMessageToServer(command)
     console:log("Finished sending AI move request.")
 end
 

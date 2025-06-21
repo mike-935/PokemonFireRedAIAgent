@@ -83,9 +83,10 @@ class EmuRelay:
                 #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
                 return
             case "SAVE_MOVE":
-                formatted_data = self.GameTranslatorPandas.translate(split_data)
+                print('here')
+                #formatted_data = self.GameTranslatorPandas.translate(split_data)
                 #formatted_data = self.GameTranslator.translate(split_data, True)
-                print("Here is the formatted data to save:", formatted_data)
+                #print("Here is the formatted data to save:", formatted_data)
                 return
             case _:
                 print("Unsupported command:", split_data[0])

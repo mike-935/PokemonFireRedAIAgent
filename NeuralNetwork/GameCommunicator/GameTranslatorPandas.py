@@ -4,8 +4,8 @@ import os
 class GameTranslatorPandas:
     def __init__(self):
         self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-        self.move_effects = self.create_effect_list()
-        self.move_types = self.create_move_types_list()
+        #self.move_effects = self.create_effect_list()
+        #self.move_types = self.create_move_types_list()
         
     def translate(self, message, training=False):
         battle_data = list(map(float, message[1:]))
@@ -19,9 +19,11 @@ class GameTranslatorPandas:
         # need to know if in doubles and the status of each pokemon
         # maybe include stuff like weather, terrain, etc.
         columns = [
-            "p_type1", "p_type2", "p_level", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd", "p_mvID1", "p_mvID2", "p_mvID3", "p_mvID4", 
-            "p_mvEID1", "p_mvEID2", "p_mvEID3", "p_mvEID4", "p_mvType1", "p_mvType2", "p_mvType3", "p_mvType4", "p_mvDmg1", "p_mvDmg2", "p_mvDmg3", "p_mvDmg4",
-            "p_mvAcc1", "p_mvAcc2", "p_mvAcc3", "p_mvAcc4", "p_mvPP1", "p_mvPP2", "p_mvPP3", "p_mvPP4",
+            "p_type1", "p_type2", "p_level", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd", 
+            "p_mvID1", "p_mvEID1", "p_mvType1", "p_mvDmg1", "p_mvAcc1", "p_mvPP1", 
+            "p_mvID2", "p_mvEID2", "p_mvType2", "p_mvDmg2", "p_mvAcc2", "p_mvPP2", 
+            "p_mvID3", "p_mvEID3", "p_mvType3", "p_mvDmg3", "p_mvAcc3", "p_mvPP3",
+            "p_mvID4", "p_mvEID4", "p_mvType4", "p_mvDmg4", "p_mvAcc4", "p_mvPP4",
             "o_type1", "o_type2", "o_level", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", "training"
         ]
 
@@ -29,29 +31,30 @@ class GameTranslatorPandas:
             print("incorrect value match between columns")
     
         df = pd.DataFrame([battle_data], columns=columns)
+        df["p_type1"] = df["p_type1"].apply(self.one_hot_type)
+        df["p_type2"] = df["p_type2"].apply(self.one_hot_type)
         
+        normalization_values = {
+            "p_level": 100,
+            "p_hp":  714,
+            "p_atk": 2016,
+            "p_def": 2456,
+            "p_spatk": 2016,
+            "p_spdef": 2456,
+            "p_spd": 2016
+        }
+        
+        df["p_curr_hp"] = df["p_curr_hp"] / df["p_hp"]
+        print(df)
         return df
-
-    # Creates the list of Pokémon move effects from the move_effects.txt file.
-    # Each index in the list corresponds to the effect of the move at that index.
-    def create_effect_list(self):
-        effects = []
-        effects_path = os.path.join(self.root_dir, "constants/move_effects.txt")
-        with open(effects_path, "r") as move_effects_file:
-            lines = move_effects_file.readlines()
-            for line in lines:
-                effect = line.split(" ")[0]
-                effects.append(effect)
-        return effects
-
-    # Creates the list of Pokémon types from the types.txt file.
-    # Each index in the list corresponds to the type of the move at that index.
-    def create_move_types_list(self):
-        types = []
-        types_path = os.path.join(self.root_dir, "constants/types.txt")
-        with open(types_path, "r") as types_file:
-            lines = types_file.readlines()
-            for line in lines:
-                move_type = line.split(" ")[0]
-                types.append(move_type)
-        return types
+    
+    def format_moves(self, df):
+        df = df.copy()
+        
+    
+    
+    def one_hot_type(self, type_id, num_types=18):
+        one_hot = [0] * num_types
+        if 0 <= int(type_id) < num_types:
+            one_hot[int(type_id)] = 1
+        return one_hot
