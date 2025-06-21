@@ -374,6 +374,92 @@ function getLastUsedMoveID()
     return emu:read8(Game.lastUsedMove)
 end
 
+function GameData.sendTrainingData(game, currentPokemon)
+    console:log("Sending to Python the turn to be saved...")
+
+    local command = "SAVE_MOVE,"
+    local playerDecision = game:getTurnDecision(currentPokemon)
+
+    console:log("Sending turn data: " .. command)
+    -- SendMessageToServer(command)
+    console:log("Finished sending turn data.")
+end
+
+function GameData.getTurnDecision(game, currentPokemon)
+    -- first lets check for a move choice
+    local decision = -1
+    local chosenMoveIndex = -1
+    for i = 1, 4 do
+        local moveData = game:moveAsList(currentPokemon, i)
+        if moveData[1] == getLastUsedMoveID() then
+            chosenMoveIndex = i - 1
+        end
+    end
+
+    console:log(string.format("Chosen move index is: %d", chosenMoveIndex))
+    if chosenMoveIndex == -1 then
+        console:log("Chosen move index is -1, this means the last used move was not found in the player's moves! or maybe it means switched")
+        -- now lets check for a switch
+        local leftOwn = emu:read8(game.battlerPartyIndexes) + 1
+        local newActivePokemon = game:getPokemonData(Pokemon[leftOwn][2])
+        console:log(string.format("Left own is : %d, current pokemon species is: %d", leftOwn, currentPokemon.species))
+        local oldActivePokemon = LastActivePokemon
+        console:log("Current Pokemon: " .. game:getPokemonName(newActivePokemon.species))
+        console:log("Old Pokemon: " .. game:getPokemonName(oldActivePokemon.species))
+        if newActivePokemon ~= oldActivePokemon then
+            console:log("Pokemon switched from " .. game:getPokemonName(oldActivePokemon.species) .. " to " .. game:getPokemonName(newActivePokemon.species))
+        else
+            console:error("Current Pokemon is the same as the old Pokemon, this should not happen!")
+        end
+        -- if the pokemon switched, we return index + 3 to indicate a switch
+        console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 2))
+        decision = leftOwn + 2
+    else
+        console:log("Chosen move index is: " .. chosenMoveIndex)
+        decision = chosenMoveIndex
+    end
+    return decision
+end
+
+function GameData.saveTurnData(game, currentPokemon)
+    local playerPokemonData = game:formatPlayerPokemon(currentPokemon, true)
+
+    local opponentPokemon = game:getPokemonData(Game.enemyParty)
+    local opponentPokemonData = game:formatOpponentPokemon(opponentPokemon)
+
+    -- combine tables
+    for _,data in ipairs(opponentPokemonData) do
+        table.insert(playerPokemonData, data)
+    end
+
+    --[[
+    for i = 2,6 do
+        local pokemonAT = game:getPokemonData(Pokemon[i][2])
+        if not pokemonAT then
+            console:error(string.format("Pokemon %d data is nil!", i))
+            return nil
+        end
+        if pokemonAT.species == 0 then
+            console:log(string.format("Pokemon %d is empty, skipping...", i))
+        end
+        console:log(string.format("Pokemon %d: %s", i, game:getPokemonName(pokemonAT.species)))
+    end
+    --]]
+    local stringFormat = ""
+    for _,data in ipairs(playerPokemonData) do
+        stringFormat = stringFormat .. "%s,"
+    end
+
+    -- Remove the last comma
+    stringFormat = string.sub(stringFormat, 1, -2)
+
+    --[[
+    for i, v in ipairs(playerPokemonData) do
+        console:log(string.format("Turn Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
+    end
+    --]]
+    return playerPokemonData
+end
 
 function GameData.requestAIMove(game, currentPokemon, trainingMode)
     console:log("Requesting AI move for current Pokemon...")
@@ -636,6 +722,20 @@ function getEffectiveAccuracyEvasionStat(base, stage)
 end
 
 
+function recreateParty()
+    -- This function recreates the party from the GameData
+    local party = {}
+    local partyCount = emu:read8(Game.partyCount)
+    for i = 1, partyCount do
+        local pokemonData = Game:getPokemonData(Pokemon[i][2])
+        if pokemonData.species ~= 0 then
+            table.insert(i, pokemonData)
+        end
+    end
+    return party
+end
+
+
 -- This is the start of functionality associated the the mGBA emulator
 
 function InitializeGame()
@@ -700,28 +800,15 @@ function InitializeGame()
     LastPressedKey = nil
     initializeSocketConnection()
     UseBattleAI = false
-    BattleAIThinking = false
+    SocketCommunicating = false
+    local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
+    LastActivePokemon = Game:getPokemonData(Pokemon[leftOwn][2])
+    TurnData = {}
+    TrainingMode = false
     InBattleAddress = readBattleAddress()
     console:log("Game initialized successfully!")
 end
 
--- On Game reset (Not scripting reset), do this behavior
-function ResetGame()
-    console:log("Game has been reset!")
-    PrintBuffer:clear()
-    Frame = 0
-    CurrentSelectedPokemon = 1
-    LastPressedKey = nil
-    UseBattleAI = false
-    BattleAIThinking = false
-    InBattleAddress = readBattleAddress()
-    -- Probably don't have to but lets reset the connection
-    if socket then
-        socket:close()
-        console:log("Socket connection closed.")
-    end
-    initializeSocketConnection()
-end
 
 HEX_KEYS = {
     RIGHT = 0x10,
@@ -746,15 +833,31 @@ function Input()
             elseif battlersCount > 1 then
                 console:log("Pressed Activate AI")
                 UseBattleAI = true
+                local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
+                LastActivePokemon = Game:getPokemonData(Pokemon[leftOwn][2])
             else
                 console:log("Cannot use AI in a single or safari battle!")
             end
         elseif LastPressedKey == (HEX_KEYS.B_Z | HEX_KEYS.LEFT) then
-            if BattleAIThinking then
+            if SocketCommunicating then
                 console:log("Battle AI is thinking! Unable to cancel while in progress.")
             else
                 console:log("Pressed Deactivate AI")
                 UseBattleAI = false
+            end
+        elseif LastPressedKey == (HEX_KEYS.UP | HEX_KEYS.A_X) then
+            if TrainingMode then
+                console:log("Training Mode is already active!")
+            else
+                console:log("Pressed Activate Training Mode")
+                TrainingMode = true
+            end
+        elseif LastPressedKey == (HEX_KEYS.DOWN | HEX_KEYS.A_X) then
+            if not TrainingMode then
+                console:log("Training Mode is already deactivated!")
+            else
+                console:log("Pressed Deactivate Training Mode")
+                TrainingMode = false
             end
         end
     end
@@ -768,6 +871,8 @@ function Update()
     
 
     CurrentPokemon = Pokemon[CurrentSelectedPokemon][2]
+    local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
+    currentActivePlayerPokemon = Game:getPokemonData(Pokemon[leftOwn][2])
 
     if not CurrentPokemon then
         PrintBuffer:print("Current Pokemon address is nil!")
@@ -792,51 +897,42 @@ function Update()
     if InBattleAddress ~= readBattleAddress() and readBattleAddress() == 0 then
         console:log("First entering battle!")
         InBattleAddress = readBattleAddress()
-        console:log(string.format("In Battle with battlers being: %i", Game:getBattlersCount()))
-        if Game:getBattlersCount() == 4 then
-            console:log("There are 4 battlers in the current battle, this is a double battle!")
-            local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
-            local leftOwnPokemon = Game:getPokemonData(Pokemon[leftOwn][2])
-            local leftOther = emu:read8(Game.battlerPartyIndexes + 6) + 1
-            local leftOtherPokemon = Game:getPokemonData(Pokemon[0][2] + ((leftOther - 1) * 100))
-            local rightOwn = emu:read8(Game.battlerPartyIndexes + 4) + 1
-            local rightOwnPokemon = Game:getPokemonData(Pokemon[rightOwn][2])
-            local rightOther = emu:read8(Game.battlerPartyIndexes + 2) + 1
-            local rightOtherPokemon = Game:getPokemonData(Pokemon[0][2] + ((rightOther - 1) * 100))
-            console:log(string.format("Left own battler index: %d", leftOwn))
-            console:log(string.format("Right own battler index: %d", rightOwn))
-            console:log(string.format("Left other battler index: %d", leftOther))
-            console:log(string.format("Right other battler index: %d", rightOther))
-            console:log(string.format("Left own pokemon: %-10s , %s", Game:getPokemonName(leftOwnPokemon.species), leftOwnPokemon.nickname))
-            console:log(string.format("Right own pokemon: %-10s,  %s", Game:getPokemonName(rightOwnPokemon.species), rightOwnPokemon.nickname))
-            console:log(string.format("Left other pokemon: %-10s, %s", Game:getPokemonName(leftOtherPokemon.species), leftOtherPokemon.nickname))
-            console:log(string.format("Right other pokemon: %-10s, %s", Game:getPokemonName(rightOtherPokemon.species), rightOtherPokemon.nickname))
-        end
+        TurnData = Game:saveTurnData(currentActivePlayerPokemon)
     end
     -- maybe greater than 1, should just be != 0
     if CurrentTurn ~= getTurnCount() and readBattleAddress() == 0 and Game:getBattlersCount() == 2 then
         console:log(string.format("Turn Changed, Current Turn: %i, Previous Turn: %i, Last Used Move ID: %i", getTurnCount(), CurrentTurn, getLastUsedMoveID()))
         CurrentTurn = getTurnCount()
         if UseBattleAI then
-            if not BattleAIThinking then
+            if not SocketCommunicating then
                 console:log("Sending turn data...")
-                BattleAIThinking = true
-                playerPokemon = Game:getPokemonData(CurrentPokemon)
-                Game:requestAIMove(playerPokemon, true)
+                SocketCommunicating = true
+                Game:requestAIMove(currentActivePlayerPokemon, true)
                 console:log("Turn Data sent!")
-                -- On message receive turn off BattleAIThinking
+                -- On message receive turn off SocketCommunicating
             end
         end
+
+        if TrainingMode and not SocketCommunicating then
+            console:log("Sending turn data for training...")
+            SocketCommunicating = true
+            Game:sendTrainingData(currentActivePlayerPokemon)
+            console:log("Turn Data sent for training!")
+        end
+        -- Save the turn data
+        TurnData = Game:saveTurnData(currentActivePlayerPokemon)
+        -- Save the current Active Pokemon
+        LastActivePokemon = currentActivePlayerPokemon
     end
 
     --[[]
     if UseBattleAI then
-        if not BattleAIThinking then
+        if not SocketCommunicating then
             console:log("AI will attempt to make a move!")
-            BattleAIThinking = true
+            SocketCommunicating = true
             playerPokemon = Game:getPokemonData(CurrentPokemon)
             Game:requestAIMove(playerPokemon, false)
-            -- On message receive turn off BattleAIThinking
+            -- On message receive turn off SocketCommunicating
         end
     end
     --]]
@@ -845,11 +941,11 @@ function Update()
 
     --[[
     if readBattleAddress() == 0 and UseBattleAI then
-        if not BattleAIThinking then
+        if not SocketCommunicating then
             console:log("AI will attempt to make a move!")
-            BattleAIThinking = true
+            SocketCommunicating = true
             Game:requestAIMove(CurrentPokemon)
-            -- On message receive turn off BattleAIThinking
+            -- On message receive turn off SocketCommunicating
         end
     end
     --]]
@@ -1024,7 +1120,6 @@ end
 
 callbacks:add("keysRead", Input)
 callbacks:add("frame", Update)
-callbacks:add("reset", ResetGame)
 callbacks:add("start", InitializeGame)
 callbacks:add("stop", EndSocketConnection)
 callbacks:add("shutdown", EndSocketConnection)
