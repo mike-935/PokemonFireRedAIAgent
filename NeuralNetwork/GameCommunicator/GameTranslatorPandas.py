@@ -19,12 +19,12 @@ class GameTranslatorPandas:
         # need to know if in doubles and the status of each pokemon
         # maybe include stuff like weather, terrain, etc.
         columns = [
-            "p_type1", "p_type2", "p_level", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd", 
+            "p_type1", "p_type2", "p_level", "p_status", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd", 
             "p_mvID1", "p_mvEID1", "p_mvType1", "p_mvDmg1", "p_mvAcc1", "p_mvPP1", 
             "p_mvID2", "p_mvEID2", "p_mvType2", "p_mvDmg2", "p_mvAcc2", "p_mvPP2", 
             "p_mvID3", "p_mvEID3", "p_mvType3", "p_mvDmg3", "p_mvAcc3", "p_mvPP3",
             "p_mvID4", "p_mvEID4", "p_mvType4", "p_mvDmg4", "p_mvAcc4", "p_mvPP4",
-            "o_type1", "o_type2", "o_level", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", "training"
+            "o_type1", "o_type2", "o_level", "o_status", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", "training"
         ]
 
         if len(battle_data) != len(columns):
@@ -44,8 +44,7 @@ class GameTranslatorPandas:
             "p_spd": 2016
         }
         
-        df["p_curr_hp"] = df["p_curr_hp"] / df["p_hp"]
-        print(df)
+        df["p_cur_hp"] = df["p_cur_hp"] / df["p_hp"]
         return df
     
     def format_moves(self, df):
