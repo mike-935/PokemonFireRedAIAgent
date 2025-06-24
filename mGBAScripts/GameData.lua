@@ -358,9 +358,17 @@ function GameData.getPokemonData(game, pokemonAddress)
     return pokemon
 end
 
-
+--[[
+This function reads the battle address to determine if a battle is ongoing
+_____________________
+0   |   In battle   |
+1   |   Won         |
+2   |   Lost        |
+4   |   Fled        |
+7   |   Caught      |
+---------------------
+--]]
 function readBattleAddress()
-    -- This function reads the battle address to determine if a battle is ongoing
     return emu:read8(Game.battleAddress)
 end
 
@@ -374,47 +382,101 @@ function getLastUsedMoveID()
     return emu:read8(Game.lastUsedMove)
 end
 
-function GameData.sendTrainingData(game, currentPokemon)
-    console:log("Sending to Python the turn to be saved...")
 
-    local command = "SAVE_MOVE,"
-    local battleData = {table.unpack(TurnData)}
+--[[
+Sends a message to the python socket with the current turn data
+if we are on training mode it sends the old turn data and the move made for that turn
+otherwise it sends the current turn data and requests a move
+--]]
+function GameData.contactPythonSocket(game, currentPokemon)
+    console:log("Preparing to message python...")
+
+    local command = "REQUEST_AI_MOVE"
+    local turnData = game:getTurnData(currentPokemon)
+
+    if TrainingMode then
+        command = "SAVE_MOVE"
+        turnData = TurnData
+    end
+
+    local battleData = {command, table.unpack(turnData)}
+
+    -- Add the data for each party pokemon
     for i = 2, 6 do
         local partyPokemon = game:getPokemonData(Pokemon[i][2])
-        local formattedPartyPokemon = game:formatPlayerPokemon(partyPokemon, false)
+        local formattedPartyPokemon = game:formatPlayerPartyPokemon(partyPokemon)
         for _, v in ipairs(formattedPartyPokemon) do
             table.insert(battleData, v)
         end
     end
 
-    local playerDecision = game:getTurnDecision(currentPokemon)
-    table.insert(battleData, playerDecision)
-
-    local stringFormat = ""
-    for _,data in ipairs(battleData) do
-        stringFormat = stringFormat .. "%s,"
+    if TrainingMode then
+        -- Add the choice that the player made for the turn
+        local playerDecision = game:getTurnDecision(currentPokemon)
+        table.insert(battleData, playerDecision)
     end
 
-    -- Remove the last comma
-    stringFormat = string.sub(stringFormat, 1, -2)
 
+    -- turn the table into a string
+    local pokemonData = tableAsString(battleData)
 
     for i, v in ipairs(battleData) do
         console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
     end
 
+    console:log("Sending data: " .. pokemonData)
+    SendMessageToServer(pokemonData)
+    console:log("Finished sending data.")
+end
 
-    local pokemonData = string.format(
-        stringFormat,
-        table.unpack(battleData)
-    )
+--[[
+Sends a message to the python socket of the turn data and choice the player has made
+____________________________________________________________________________
+Player Pokemon      |   type, type2, level, status, currenthp, hp,         |
+                    |   atk, def, spatk, spdef, spd, moveXID, moveEffectID,|
+                    |   moveXType, moveXDamage, moveXAccuracy, moveXpp     |
+                    |                                                      |
+Opponent Pokemon    |   type, type2, level, status, currenthp, hp, atk,    |
+                    |   def, spatk, spdef, spd                             |
+Party Pokemon (2-6) |   type, type2, level, status, currenthp, hp, atk,    |
+                    |    def, spatk, spdef, spd, switchable                |
+Chosen Move/Switch  |   0-8                                                |
+----------------------------------------------------------------------------
+--]]
+function GameData.sendTrainingData(game, currentPokemon)
+    console:log("Sending to Python the turn to be saved...")
 
-    console:log("Sending turn data: " .. command)
-    -- SendMessageToServer(command)
+    -- Start the message with the command and the turn data
+    local command = "SAVE_MOVE,"
+    local battleData = {command, table.unpack(TurnData)}
+
+    -- Add the data for each party pokemon
+    for i = 2, 6 do
+        local partyPokemon = game:getPokemonData(Pokemon[i][2])
+        local formattedPartyPokemon = game:formatPlayerPartyPokemon(partyPokemon)
+        for _, v in ipairs(formattedPartyPokemon) do
+            table.insert(battleData, v)
+        end
+    end
+    -- Add the choice that the player made for the turn
+    local playerDecision = game:getTurnDecision(currentPokemon)
+    table.insert(battleData, playerDecision)
+
+    -- turn the table into a string
+    local pokemonData = tableAsString(battleData)
+
+    console:log("Sending turn data: " .. pokemonData)
+    -- SendMessageToServer(pokemonData)
     console:log("Finished sending turn data.")
 end
 
+--[[
+This function gets the decision made by the player in the current turn
+0-3 represents the move index chosen by the player
+4-8 represents the switch index chosen by the player (To get the actual index subtract 2)
+--]]
 function GameData.getTurnDecision(game, currentPokemon)
+    console:log("Getting the player's decision for the current turn...")
     -- first lets check for a move choice
     local decision = -1
     local chosenMoveIndex = -1
@@ -425,24 +487,11 @@ function GameData.getTurnDecision(game, currentPokemon)
         end
     end
 
-    console:log(string.format("Chosen move index is: %d", chosenMoveIndex))
+    console:log(string.format("Chosen move index is: %d \n Last Used MoveID is %i", chosenMoveIndex, getLastUsedMoveID()))
+    -- if the chosen move index is -1, it means the player did not choose a move so lets see
+    -- if they switched to another pokemon
     if chosenMoveIndex == -1 then
-        console:log("Chosen move index is -1, this means the last used move was not found in the player's moves! or maybe it means switched")
-        -- now lets check for a switch
-        local leftOwn = emu:read8(game.battlerPartyIndexes) + 1
-        local newActivePokemon = game:getPokemonData(Pokemon[leftOwn][2])
-        console:log(string.format("Left own is : %d, current pokemon species is: %d", leftOwn, currentPokemon.species))
-        local oldActivePokemon = LastActivePokemon
-        console:log("Current Pokemon: " .. game:getPokemonName(newActivePokemon.species))
-        console:log("Old Pokemon: " .. game:getPokemonName(oldActivePokemon.species))
-        if newActivePokemon ~= oldActivePokemon then
-            console:log("Pokemon switched from " .. game:getPokemonName(oldActivePokemon.species) .. " to " .. game:getPokemonName(newActivePokemon.species))
-        else
-            console:error("Current Pokemon is the same as the old Pokemon, this should not happen!")
-        end
-        -- if the pokemon switched, we return index + 3 to indicate a switch
-        console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 3))
-        decision = leftOwn + 3
+        decision = game.getSwitchChoice(game, currentPokemon)
     else
         console:log("Chosen move index is: " .. chosenMoveIndex)
         decision = chosenMoveIndex
@@ -450,227 +499,176 @@ function GameData.getTurnDecision(game, currentPokemon)
     return decision
 end
 
-function GameData.saveTurnData(game, currentPokemon)
-    local playerPokemonData = game:formatPlayerPokemon(currentPokemon, true)
+-- If the player did not choose a move, find which pokemon they switched to
+function GameData.getSwitchChoice(game, currentPokemon)
+    console:log("Chosen move index is -1, this means the last used move was not found in the player's moves! or maybe it means switched")
+    -- now lets check for a switch
+    local leftOwn = emu:read8(game.battlerPartyIndexes) + 1
+    local newActivePokemon = game:getPokemonData(Pokemon[leftOwn][2])
+    console:log(string.format("Left own is : %d, current pokemon species is: %d", leftOwn, currentPokemon.species))
+    local oldActivePokemon = LastActivePokemon
+    console:log("Current Pokemon: " .. game:getPokemonName(newActivePokemon.species))
+    console:log("Old Pokemon: " .. game:getPokemonName(oldActivePokemon.species))
+    if newActivePokemon ~= oldActivePokemon then
+        console:log("Pokemon switched from " .. game:getPokemonName(oldActivePokemon.species) .. " to " .. game:getPokemonName(newActivePokemon.species))
+    else
+        console:error("Current Pokemon is the same as the old Pokemon, this should not happen!")
+    end
+    -- we return index + 3 to indicate a switch as part of the player decision field
+    console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 3))
+    return leftOwn + 3
+end
+
+-- get the current turn's data,
+-- which currently is the player's pokemon data and the opponent's pokemon data
+function GameData.getTurnData(game, currentPokemon)
+    local playerPokemonData = game:formatActivePokemon(currentPokemon, true)
 
     local opponentPokemon = game:getPokemonData(Game.enemyParty)
-    local opponentPokemonData = game:formatOpponentPokemon(opponentPokemon)
+    local opponentPokemonData = game:formatActivePokemon(opponentPokemon, false)
 
     -- combine tables
     for _,data in ipairs(opponentPokemonData) do
         table.insert(playerPokemonData, data)
     end
 
-    --[[
-    for i = 2,6 do
-        local pokemonAT = game:getPokemonData(Pokemon[i][2])
-        if not pokemonAT then
-            console:error(string.format("Pokemon %d data is nil!", i))
-            return nil
-        end
-        if pokemonAT.species == 0 then
-            console:log(string.format("Pokemon %d is empty, skipping...", i))
-        end
-        console:log(string.format("Pokemon %d: %s", i, game:getPokemonName(pokemonAT.species)))
-    end
-    --]]
-    local stringFormat = ""
-    for _,data in ipairs(playerPokemonData) do
-        stringFormat = stringFormat .. "%s,"
-    end
-
-    -- Remove the last comma
-    stringFormat = string.sub(stringFormat, 1, -2)
-
-    --[[
-    for i, v in ipairs(playerPokemonData) do
-        console:log(string.format("Turn Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
-    end
-    --]]
     return playerPokemonData
 end
 
-function GameData.requestAIMove(game, currentPokemon, trainingMode)
+
+--[[
+Format's the pokemon data for the player and opponent in a format that can be sent to the server
+to Request the Neural Network for what choice the player should make
+____________________________________________________________________________
+Player Pokemon      |   type, type2, level, status, currenthp, hp,         |
+                    |   atk, def, spatk, spdef, spd, moveXID, moveEffectID,|
+                    |   moveXType, moveXDamage, moveXAccuracy, moveXpp     |
+                    |                                                      |
+Opponent Pokemon    |   type, type2, level, status, currenthp, hp, atk,    |
+                    |   def, spatk, spdef, spd                             |
+Party Pokemon (2-6) |   type, type2, level, status, currenthp, hp, atk,    |
+                    |    def, spatk, spdef, spd, switchable                |
+----------------------------------------------------------------------------
+--]]
+function GameData.requestAIMove(game, currentPokemon)
     console:log("Requesting AI move for current Pokemon...")
 
     local command = "REQUEST_AI_MOVE,"
-    if trainingMode then
-        command = "SAVE_MOVE,"
+    local currentTurnData = game:getTurnData(currentPokemon)
+
+    local battleData = {command, table.unpack(currentTurnData)}
+
+    -- Add the data for each party pokemon
+    for i = 2, 6 do
+        local partyPokemon = game:getPokemonData(Pokemon[i][2])
+        local formattedPartyPokemon = game:formatPlayerPartyPokemon(partyPokemon)
+        for _, v in ipairs(formattedPartyPokemon) do
+            table.insert(battleData, v)
+        end
     end
-    if not currentPokemon or currentPokemon == nil then
-        console:error("Current Pokemon is nil when requesting ai move!")
-        return
-    end
-    local pokemonData = game:formatPokemonData(currentPokemon, trainingMode)
-    command = command .. pokemonData
+
+    -- turn the table into a string
+    local pokemonData = tableAsString(battleData)
+
     console:log("Sending AI move request with data: " .. command)
     SendMessageToServer(command)
     console:log("Finished sending AI move request.")
 end
 
-function GameData.formatPokemonData(game, playerPokemon, trainingMode)
-    local playerPokemonData = game:formatPlayerPokemon(playerPokemon, true)
-
-    -- structure of the data
-    -- First is the Player Pokemon
-    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
-    -- Second is the Opponent Pokemon (appended to the end of above):
-    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd
-    -- 46 is last of opponent (spd)
-
-    -- After the opponent pokemon we add each of the player's other pokemon in the format
-    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, switchable (58)
-
-    -- And att the end we have the chosen move index or if you switched
-
-    -- Get all the pokemon's moves in a table in the format:
-    -- moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
-
-
-    local opponentPokemon = game:getPokemonData(Game.enemyParty)
-    local opponentPokemonData = game:formatOpponentPokemon(opponentPokemon)
-
-
-
-    -- combine tables
-    for _,data in ipairs(opponentPokemonData) do
-        table.insert(playerPokemonData, data)
-    end
-
-    --[[
-    for i = 2,6 do
-        local pokemonAT = game:getPokemonData(Pokemon[i][2])
-        if not pokemonAT then
-            console:error(string.format("Pokemon %d data is nil!", i))
-            return nil
-        end
-        if pokemonAT.species == 0 then
-            console:log(string.format("Pokemon %d is empty, skipping...", i))
-        end
-        console:log(string.format("Pokemon %d: %s", i, game:getPokemonName(pokemonAT.species)))
-    end
-    --]]
-
-
-    local chosenMoveIndex = -1
-    for i = 1, 4 do
-        local moveData = game:moveAsList(playerPokemon, i)
-        if trainingMode then
-            if moveData[1] == getLastUsedMoveID() then
-                chosenMoveIndex = i - 1
-            end
-        end
-    end
-
-    if trainingMode then
-        if chosenMoveIndex == -1 then
-            console:log("Chosen move index is -1, this means the last used move was not found in the player's moves! or maybe it means switched")
-        end
-        console:log(string.format("Chosen move index is: %d", chosenMoveIndex))
-        -- If training mode, append the chosen move index to the end of the player pokemon data
-        table.insert(playerPokemonData, chosenMoveIndex)
-    end
-
-    local stringFormat = ""
-    for _,data in ipairs(playerPokemonData) do
-        stringFormat = stringFormat .. "%s,"
-    end
-
-    -- Remove the last comma
-    stringFormat = string.sub(stringFormat, 1, -2)
-
-
-    for i, v in ipairs(playerPokemonData) do
-        console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
-    end
-
-
-    local pokemonData = string.format(
-        stringFormat,
-        table.unpack(playerPokemonData)
-    )
-
-    return pokemonData
-end
-
-function GameData.formatPlayerPokemon(game, playerPokemon, active)
+-- Formats a given pokemon into the a form that lists its data like types, level, status, level, etc
+-- if the pokemon is not the active pokemon out then we also have to add an extra field to the end
+-- that clarifies if the pokemon is switchable or not
+function GameData.formatPlayerPartyPokemon(game, playerPokemon)
     -- Get all the player pokemon's data in the format of:
     -- type, type2, level, status, currnethp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
     local playerPokemonData = {}
-    if active then
+
+    -- if not active we need to first check if the pokemon is alive or not
+    -- if they are then we send type1, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, 1
+    -- if they are not then we send 0 for all stats
+    if playerPokemon.species == 0 then
+        console:log("Pokemon is null")
+        for i = 1, 12 do
+            table.insert(playerPokemonData, 0)
+        end
+    else
         table.insert(playerPokemonData, playerPokemon.type1)
         table.insert(playerPokemonData, playerPokemon.type2)
         table.insert(playerPokemonData, playerPokemon.level)
         table.insert(playerPokemonData, playerPokemon.status)
         table.insert(playerPokemonData, playerPokemon.hp)
-        local chosenMoveIndex = -1
-        local moves = {}
-
-        for i = 1, 4 do
-            local moveData = game:moveAsList(playerPokemon, i)
-            for _, v in ipairs(moveData) do
-                table.insert(moves, v)
-            end
-        end
-
-        local playerStartAddress = Game.playerBattleStruct + 24
-        local playerStatStages = {
-            -- hp
-            emu:read8(playerStartAddress),
-            -- attack
-            emu:read8(playerStartAddress + 1),
-            -- defense
-            emu:read8(playerStartAddress + 2),
-            -- Sp.Atk
-            emu:read8(playerStartAddress + 4),
-            -- Sp.Def
-            emu:read8(playerStartAddress + 5),
-            -- Spd
-            emu:read8(playerStartAddress + 3),
-            -- Accuracy
-            -- Evasion
-        }
-
-        stringStats = {
-            "HP", "Attack", "Defense", "Sp.Atk", "Sp.Def", "Spd"
-        }
-
-        -- Add the stats of the player pokemon
+        -- If not active, just add the base stats
         for i = 1,6 do
-            table.insert(playerPokemonData, getEffectiveStat(playerPokemon.stats[i], playerStatStages[i] - 6))
+            table.insert(playerPokemonData, playerPokemon.stats[i])
         end
-
-        -- Add the moves of the player pokemon
-        for _,moveData in ipairs(moves) do
-            table.insert(playerPokemonData, moveData)
-        end
-
-    else
-        -- if not active we need to first check if the pokemon is alive or not
-        -- if they are then we send type1, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, 1
-        -- if they are not then we send 0 for all stats
-        if playerPokemon.species == 0 then
-            console:log("Pokemon is null")
-            for i = 1, 12 do
-                table.insert(playerPokemonData, 0)
-            end
-        else
-            table.insert(playerPokemonData, playerPokemon.type1)
-            table.insert(playerPokemonData, playerPokemon.type2)
-            table.insert(playerPokemonData, playerPokemon.level)
-            table.insert(playerPokemonData, playerPokemon.status)
-            table.insert(playerPokemonData, playerPokemon.hp)
-            -- If not active, just add the base stats
-            for i = 1,6 do
-                table.insert(playerPokemonData, playerPokemon.stats[i])
-            end
-            table.insert(playerPokemonData, 1) -- 1 means the pokemon is alive and switchable
-        end
+        table.insert(playerPokemonData, 1) -- 1 means the pokemon is alive and switchable
     end
 
     return playerPokemonData
 end
 
+function GameData.formatActivePokemon(game, pokemon, playerPokemon)
+    local pokemonData = {}
+
+    -- add the stats
+    table.insert(pokemonData, pokemon.type1)
+    table.insert(pokemonData, pokemon.type2)
+    table.insert(pokemonData, pokemon.level)
+    table.insert(pokemonData, pokemon.status)
+    table.insert(pokemonData, pokemon.hp)
+
+    local statStageAddress = Game.opposingBattleStruct + 24
+    if playerPokemon then
+        statStageAddress = Game.playerBattleStruct + 24
+    end
+
+    -- get the pokemon's stat stages (treated as -6-+6) that affect the stats
+    console:log("Reading stat stages from address: " .. statStageAddress)
+    local statStages = {
+        -- hp
+        emu:read8(statStageAddress),
+        -- attack
+        emu:read8(statStageAddress + 1),
+        -- defense
+        emu:read8(statStageAddress + 2),
+        -- Sp.Atk
+        emu:read8(statStageAddress + 4),
+        -- Sp.Def
+        emu:read8(statStageAddress + 5),
+        -- Spd
+        emu:read8(statStageAddress + 3),
+        -- Accuracy
+        -- Evasion
+    }
+
+    -- Add the stats of the player pokemon
+    for i = 1,6 do
+        table.insert(pokemonData, getEffectiveStat(pokemon.stats[i], statStages[i] - 6))
+    end
+
+    -- if its the active player pokemon we want to get the moves
+    if playerPokemon then
+        local chosenMoveIndex = -1
+        local moves = {}
+
+        for i = 1, 4 do
+            local moveData = game:moveAsList(pokemon, i)
+            for _, v in ipairs(moveData) do
+                table.insert(moves, v)
+            end
+        end
+
+        -- Add the moves of the player pokemon
+        for _,moveData in ipairs(moves) do
+            table.insert(pokemonData, moveData)
+        end
+    end
+
+    return pokemonData
+end
+
+
+--
 function GameData.formatOpponentPokemon(game, opponentPokemon)
     local opposingStatStageAddress = Game.opposingBattleStruct + 24
     local opponentPokemonStatStages = {
@@ -710,6 +708,8 @@ function GameData.formatOpponentPokemon(game, opponentPokemon)
     return opponentPokemonData
 end
 
+-- This function returns the move data as a list
+-- index refers to the move id that is used to index the move data
 function GameData.moveAsList(game, pokemon, index)
     -- This function returns the move data as a list
     local moveID = pokemon.moves[index]
@@ -725,6 +725,7 @@ function GameData.moveAsList(game, pokemon, index)
     return moveData
 end
 
+-- Gets the effective stat of a pokemon by using the stat stage
 function getEffectiveStat(base, stage)
     if base == nil or stage == nil then
         console:error("Base or stage is nil in getEffectiveStat!")
@@ -752,17 +753,31 @@ function getEffectiveAccuracyEvasionStat(base, stage)
 end
 
 
-function recreateParty()
-    -- This function recreates the party from the GameData
-    local party = {}
-    local partyCount = emu:read8(Game.partyCount)
-    for i = 1, partyCount do
-        local pokemonData = Game:getPokemonData(Pokemon[i][2])
-        if pokemonData.species ~= 0 then
-            table.insert(i, pokemonData)
-        end
+
+-- Print the data from a given table
+function tableAsString(data)
+    console:log("Converting table to string...")
+    if data == nil or #data == 0 then
+        console:error("Data is nil or empty!")
+        return ""
     end
-    return party
+    local stringFormat = ""
+
+    for _,data in ipairs(data) do
+        stringFormat = stringFormat .. "%s,"
+    end
+
+
+
+    -- Remove the last comma
+    stringFormat = string.sub(stringFormat, 1, -2)
+
+
+    local stringData = string.format(
+        stringFormat,
+        table.unpack(data)
+    )
+    return stringData
 end
 
 
@@ -863,6 +878,10 @@ function Input()
             elseif battlersCount > 1 then
                 console:log("Pressed Activate AI")
                 UseBattleAI = true
+                if TrainingMode then
+                    console:log("Training Mode is active so we are deactivating it for AI")
+                    TrainingMode = false
+                end
                 local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
                 LastActivePokemon = Game:getPokemonData(Pokemon[leftOwn][2])
             else
@@ -881,6 +900,10 @@ function Input()
             else
                 console:log("Pressed Activate Training Mode")
                 TrainingMode = true
+                if useBattleAI then
+                    console:log("Battle AI is active so we are deactivating it for TrainingMode")
+                    useBattleAI = false
+                end
             end
         elseif LastPressedKey == (HEX_KEYS.DOWN | HEX_KEYS.A_X) then
             if not TrainingMode then
@@ -927,9 +950,16 @@ function Update()
     if InBattleAddress ~= readBattleAddress() and readBattleAddress() == 0 then
         console:log("First entering battle!")
         InBattleAddress = readBattleAddress()
-        TurnData = Game:saveTurnData(currentActivePlayerPokemon)
+        TurnData = Game:getTurnData(currentActivePlayerPokemon)
     end
-    -- maybe greater than 1, should just be != 0
+
+    --[[
+    Check if the turn has changed and we're currently in a singles battle
+    If the turn has changed, depending on the mode we are in
+    useBattleAI: we send the data of the current turn and request a move from the Neural Network
+    TrainingMode: we send the data of the last turn and the move made during it and save it in python
+    At the end we need to update the turn data and the active pokemon of the turn
+    --]]
     if CurrentTurn ~= getTurnCount() and readBattleAddress() == 0 and Game:getBattlersCount() == 2 then
         console:log(string.format("Turn Changed, Current Turn: %i, Previous Turn: %i, Last Used Move ID: %i", getTurnCount(), CurrentTurn, getLastUsedMoveID()))
         CurrentTurn = getTurnCount()
@@ -943,14 +973,16 @@ function Update()
             end
         end
 
+        -- If we are in training mode, we send the turn data to the server
         if TrainingMode and not SocketCommunicating then
             console:log("Sending turn data for training...")
             SocketCommunicating = true
-            Game:sendTrainingData(currentActivePlayerPokemon)
+            -- Game:sendTrainingData(currentActivePlayerPokemon)
+            Game:contactPythonSocket(currentActivePlayerPokemon)
             console:log("Turn Data sent for training!")
         end
         -- Save the turn data
-        TurnData = Game:saveTurnData(currentActivePlayerPokemon)
+        TurnData = Game:getTurnData(currentActivePlayerPokemon)
         -- Save the current Active Pokemon
         LastActivePokemon = currentActivePlayerPokemon
     end
