@@ -447,7 +447,7 @@ function GameData.sendTrainingData(game, currentPokemon)
     console:log("Sending to Python the turn to be saved...")
 
     -- Start the message with the command and the turn data
-    local command = "SAVE_MOVE,"
+    local command = "SAVE_MOVE"
     local battleData = {command, table.unpack(TurnData)}
 
     -- Add the data for each party pokemon
@@ -466,7 +466,7 @@ function GameData.sendTrainingData(game, currentPokemon)
     local pokemonData = tableAsString(battleData)
 
     console:log("Sending turn data: " .. pokemonData)
-    -- SendMessageToServer(pokemonData)
+    SendMessageToServer(pokemonData)
     console:log("Finished sending turn data.")
 end
 
@@ -977,7 +977,7 @@ function Update()
         if TrainingMode and not SocketCommunicating then
             console:log("Sending turn data for training...")
             SocketCommunicating = true
-            -- Game:sendTrainingData(currentActivePlayerPokemon)
+            Game:sendTrainingData(currentActivePlayerPokemon)
             Game:contactPythonSocket(currentActivePlayerPokemon)
             console:log("Turn Data sent for training!")
         end

@@ -9,7 +9,7 @@ class GameTranslatorPandas:
         
     def translate(self, message, training=False):
         battle_data = list(map(float, message[1:]))
-        print("battle_data:", battle_data)
+        #print("battle_data:", battle_data)
         #battle_data[-1] = battle_data[-1].strip()
         
         #[0.0, 2.0, 14.0, 18.0, 39.0, 19.0, 18.0, 15.0, 15.0, 22.0, 33.0, 0.0, 0.0, 35.0, 95.0, 35.0, 28.0, 23.0, 4.0, 0.0, 100.0, 15.0, 16.0, 149.0, 2.0, 40.0, 100.0, 35.0, 98.0, 
@@ -24,36 +24,72 @@ class GameTranslatorPandas:
             "p_mvID2", "p_mvEID2", "p_mvType2", "p_mvDmg2", "p_mvAcc2", "p_mvPP2", 
             "p_mvID3", "p_mvEID3", "p_mvType3", "p_mvDmg3", "p_mvAcc3", "p_mvPP3",
             "p_mvID4", "p_mvEID4", "p_mvType4", "p_mvDmg4", "p_mvAcc4", "p_mvPP4",
-            "o_type1", "o_type2", "o_level", "o_status", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", "training"
+            "o_type1", "o_type2", "o_level", "o_status", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", 
+            "p2_type1", "p2_type2", "p2_level", "p2_status", "p2_cur_hp", "p2_hp", "p2_atk", "p2_def", "p2_spatk", "p2_spdef", "p2_spd", "p2_switchable",
+            "p3_type1", "p3_type2", "p3_level", "p3_status", "p3_cur_hp", "p3_hp", "p3_atk", "p3_def", "p3_spatk", "p3_spdef", "p3_spd", "p3_switchable",
+            "p4_type1", "p4_type2", "p4_level", "p4_status", "p4_cur_hp", "p4_hp", "p4_atk", "p4_def", "p4_spatk", "p4_spdef", "p4_spd", "p4_switchable",
+            "p5_type1", "p5_type2", "p5_level", "p5_status", "p5_cur_hp", "p5_hp", "p5_atk", "p5_def", "p5_spatk", "p5_spdef", "p5_spd", "p5_switchable",
+            "p6_type1", "p6_type2", "p6_level", "p6_status", "p6_cur_hp", "p6_hp", "p6_atk", "p6_def", "p6_spatk", "p6_spdef", "p6_spd", "p6_switchable",
+            "player_choice"
         ]
 
         if len(battle_data) != len(columns):
             print("incorrect value match between columns")
     
         df = pd.DataFrame([battle_data], columns=columns)
-        df["p_type1"] = df["p_type1"].apply(self.one_hot_type)
-        df["p_type2"] = df["p_type2"].apply(self.one_hot_type)
         
+        #Setting values to normalize each stat by 
         normalization_values = {
-            "p_level": 100,
-            "p_hp":  714,
-            "p_atk": 2016,
-            "p_def": 2456,
-            "p_spatk": 2016,
-            "p_spdef": 2456,
-            "p_spd": 2016
+            "level": 100,
+            "hp":  714,
+            "atk": 2016,
+            "def": 2456, 
+            "spatk": 2016,
+            "spdef": 2456,
+            "spd": 2016
         }
         
-        df["p_cur_hp"] = df["p_cur_hp"] / df["p_hp"]
-        return df
-    
-    def format_moves(self, df):
-        df = df.copy()
+        #Grabbing different prefixes for each 
+        normalization_columns = ["p", "o"] + [f"p{i}" for i in range(2,7)]
         
+        #Normalizing values 
+        for normal_col in normalization_columns:
+            for col, factor in normalization_values.items():
+                stat = f"{normal_col}_{col}"
+                if stat in df.columns:
+                    df[stat] = df[stat] / factor
+        
+        
+        df["p_cur_hp"] = df["p_cur_hp"] / df["p_hp"]
+        df["o_cur_hp"] = df["o_cur_hp"] / df["o_hp"]
+        
+        type_columns = [
+            "p_type1", "p_type2", "o_type1", "o_type2"
+        ]
+
+        # Add party Pokémon types
+        for i in range(2, 7):
+            type_columns.append(f"p{i}_type1")
+            type_columns.append(f"p{i}_type2")
+            
+        df = self.one_hot_type(df, type_columns)
+            
+        df.to_csv("battle_data_onehottest.csv", index=False)
+        return df
+
     
     
-    def one_hot_type(self, type_id, num_types=18):
+    def one_hot_encode(self, type_id, num_types=18):
         one_hot = [0] * num_types
         if 0 <= int(type_id) < num_types:
             one_hot[int(type_id)] = 1
         return one_hot
+    
+    def one_hot_type(self, dataframe, columns):
+        for col in columns:
+            one_hot_df = dataframe[col].apply(self.one_hot_encode).apply(pd.Series)
+            one_hot_df.columns = [f"{col}_{i}" for i in range(18)]
+            dataframe.drop(columns=[col], inplace=True)
+            
+            dataframe = pd.concat([dataframe, one_hot_df], axis=1)
+        return dataframe

@@ -75,10 +75,12 @@ class EmuRelay:
         
     def parse_input(self, data):
         split_data = data.split(",")
+        #print('split data: ', split_data)
         match split_data[0]:
             case "REQUEST_AI_MOVE":
-                formatted_data = self.GameTranslatorPandas.translate(split_data)
-                print("formatted data", formatted_data)
+                #print('here')
+                #formatted_data = self.GameTranslatorPandas.translate(split_data)
+                #print("formatted data", formatted_data)
                 #formatted_data = self.GameTranslator.translate(split_data)
                 #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
                 return
