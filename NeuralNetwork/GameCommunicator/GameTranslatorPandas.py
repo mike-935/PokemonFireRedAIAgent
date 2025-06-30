@@ -100,3 +100,17 @@ class GameTranslatorPandas:
             
             dataframe = pd.concat([dataframe, one_hot_df], axis=1)
         return dataframe
+
+    # Creates the list of Pokémon move effects from the move_effects.txt file.
+    # Each index in the list corresponds to the effect of the move at that index.
+    def create_effects_dict(self):
+        effects = {}
+        effects_path = os.path.join(self.root_dir, "constants/move_effects.txt")
+        with open(effects_path, "r") as move_effects_file:
+            lines = move_effects_file.readlines()
+            for line in lines:
+                effect_id = line.split(" ")[1]
+                effect_encoding_index = line.split(" ")[2]
+                effects.update({effect_id: effect_encoding_index})
+        return effects
+

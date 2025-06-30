@@ -443,6 +443,7 @@ Party Pokemon (2-6) |   type, type2, level, status, currenthp, hp, atk,    |
 Chosen Move/Switch  |   0-8                                                |
 ----------------------------------------------------------------------------
 --]]
+--[[
 function GameData.sendTrainingData(game, currentPokemon)
     console:log("Sending to Python the turn to be saved...")
 
@@ -469,6 +470,7 @@ function GameData.sendTrainingData(game, currentPokemon)
     SendMessageToServer(pokemonData)
     console:log("Finished sending turn data.")
 end
+--]]
 
 --[[
 This function gets the decision made by the player in the current turn
@@ -549,7 +551,6 @@ Opponent Pokemon    |   type, type2, level, status, currenthp, hp, atk,    |
 Party Pokemon (2-6) |   type, type2, level, status, currenthp, hp, atk,    |
                     |    def, spatk, spdef, spd, switchable                |
 ----------------------------------------------------------------------------
---]]
 function GameData.requestAIMove(game, currentPokemon)
     console:log("Requesting AI move for current Pokemon...")
 
@@ -574,6 +575,7 @@ function GameData.requestAIMove(game, currentPokemon)
     SendMessageToServer(command)
     console:log("Finished sending AI move request.")
 end
+--]]
 
 -- Formats a given pokemon into the a form that lists its data like types, level, status, level, etc
 -- if the pokemon is not the active pokemon out then we also have to add an extra field to the end
@@ -850,7 +852,8 @@ function InitializeGame()
     LastActivePokemon = Game:getPokemonData(Pokemon[leftOwn][2])
     TurnData = {}
     TrainingMode = false
-    InBattleAddress = readBattleAddress()
+    InCombat = false
+    InBattle = readBattleAddress()
     console:log("Game initialized successfully!")
 end
 
@@ -947,11 +950,13 @@ function Update()
         return
     end
 
-    if InBattleAddress ~= readBattleAddress() and readBattleAddress() == 0 then
+    if InBattle ~= readBattleAddress() and readBattleAddress() == 0 then
         console:log("First entering battle!")
-        InBattleAddress = readBattleAddress()
+        InBattle = readBattleAddress()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
     end
+
+
 
     --[[
     Check if the turn has changed and we're currently in a singles battle
@@ -963,11 +968,17 @@ function Update()
     if CurrentTurn ~= getTurnCount() and readBattleAddress() == 0 and Game:getBattlersCount() == 2 then
         console:log(string.format("Turn Changed, Current Turn: %i, Previous Turn: %i, Last Used Move ID: %i", getTurnCount(), CurrentTurn, getLastUsedMoveID()))
         CurrentTurn = getTurnCount()
+        if FirstTurn then
+            console:log("Turn Changed so we update FirstTurn")
+            FirstTurn = false
+        end
+
         if UseBattleAI then
             if not SocketCommunicating then
                 console:log("Sending turn data...")
                 SocketCommunicating = true
-                Game:requestAIMove(currentActivePlayerPokemon, true)
+                Game:contactPythonSocket(currentActivePlayerPokemon)
+                -- Game:requestAIMove(currentActivePlayerPokemon, true)
                 console:log("Turn Data sent!")
                 -- On message receive turn off SocketCommunicating
             end
@@ -977,7 +988,6 @@ function Update()
         if TrainingMode and not SocketCommunicating then
             console:log("Sending turn data for training...")
             SocketCommunicating = true
-            Game:sendTrainingData(currentActivePlayerPokemon)
             Game:contactPythonSocket(currentActivePlayerPokemon)
             console:log("Turn Data sent for training!")
         end
@@ -985,6 +995,21 @@ function Update()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
         -- Save the current Active Pokemon
         LastActivePokemon = currentActivePlayerPokemon
+    end
+
+    -- Make sure to still send last turn data if we are in training mode
+    -- Basically just for if a battle ends before the end of the first turn
+    -- and for the last turn of the battle
+    if InBattle ~= readBattleAddress() and readBattleAddress() ~= 0 then
+        console:log("Battle Ended in the first turn, so we need to send if necessary")
+        FirstTurn = false
+        -- If we are in training mode, we send the turn data to the server
+        if TrainingMode and not SocketCommunicating then
+            console:log("Sending turn data for training...")
+            SocketCommunicating = true
+            Game:contactPythonSocket(currentActivePlayerPokemon)
+            console:log("Turn Data sent for training!")
+        end
     end
 
     --[[]
@@ -1013,14 +1038,14 @@ function Update()
     --]]
 
     -- need to check if we entered battle and if we are still in battle and when things/turn changes
-    if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattleAddress~=readBattleAddress() then
+    if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattle~=readBattleAddress() then
         -- console:log(string.format("8-bit: %i", readBattleAddress()))
         -- console:log(string.format("Number: %i", readBattleAddress()))
 		printPokeStatus(Game, PrintBuffer, CurrentPokemon)
 		Prev = emu:read32(CurrentPokemon)
 		PrevExp = Game:getPokemonData(CurrentPokemon).experience
 		Frame = Frame + 1
-		InBattleAddress = readBattleAddress()
+		InBattle = readBattleAddress()
 		if Frame == 6 then 
             Frame = 0
         end
@@ -1100,7 +1125,7 @@ function initializeSocketConnection()
     local port = 65432
     socket:connect(ip_address, port)
     console:log("Connected our Socket to: " .. ip_address .. ":" .. port .. "\n")
-    socket:send("Hi Holly and Ashley" .. "\r\n")
+    -- socket:send("Hi Holly and Ashley" .. "\r\n")
 end
 
 function EndSocketConnection()
@@ -1112,6 +1137,7 @@ function EndSocketConnection()
     end
 end
 
+--[[
 function send_test(message)
     if not socket then
         console:error("Socket is not initialized!")
@@ -1125,7 +1151,7 @@ function send_test(message)
         console:log("Message " .. message .. " , sent successfully.")
     end
 end
-
+--]]
 function SendMessageToServer(message)
     if not socket then
         console:error("Unable to send message because socket is invalid!")
@@ -1137,7 +1163,7 @@ function SendMessageToServer(message)
         return
     end
 
-    local success, err = socket:send(message .. "\r\n")
+    local success, err = socket:send(message .. '\r\n')
     if not success then
         console:error("Failed to send command: " .. err)
     else
@@ -1164,12 +1190,18 @@ function ReceiveFromSocket()
                     local input_num = tonumber(value)
                     emu:addKey(input_num)
                     socket:send("received message" .. "\r\n")
-                end
-
-                if command == "RELEASE_KEY" then
+                elseif command == "RELEASE_KEY" then
                     local input_num = tonumber(value)
                     emu:clearKey(input_num)
                     socket:send("received message" .. "\r\n")
+                end
+            else
+                if msg == "SAVED_TURN_DATA" then
+                    console:log("Turn data saved successfully!")
+                    SocketCommunicating = false
+                elseif msg == "ERROR" then
+                    console:log("Socket communication failure!")
+                    SocketCommunicating = false
                 end
             end
         end

@@ -1,6 +1,8 @@
 #!/usr/bin/env -S python3 -u
 
 import socket
+from http.client import responses
+
 import torch
 
 from .GameTranslator import GameTranslator
@@ -52,18 +54,14 @@ class EmuRelay:
             with connection:
                 print(f'Connected by {address}')
                 while True:
+                    print("Waiting for data...")
                     data = self.recieve_message(connection)
+                    print('Received data:')
                     if data:
                         print('We read:', data)
-                        self.parse_input(data)
-                        '''
-                        command, value = input("Enter command and value: ").split()
-                        if command == "PRESS_KEY":
-                            self.send_button(connection, value + "\r\n")
-                        if command == "RELEASE_KEY":
-                            self.send_button_release(connection, value + "\r\n")
-                        '''
-
+                        response = self.parse_input(data)
+                        self.send_message(connection, response + "\r\n")
+                        data = None
         except (KeyboardInterrupt, SystemExit) as e:
             print("Exiting gracefully...")
             self.close()
@@ -74,25 +72,26 @@ class EmuRelay:
         self.socket.close()
         
     def parse_input(self, data):
+        print("Parsing input data:")
         split_data = data.split(",")
+        response = "ERROR"
         #print('split data: ', split_data)
         match split_data[0]:
             case "REQUEST_AI_MOVE":
-                #print('here')
+                print('IN REQUEST_AI_MOVE')
                 #formatted_data = self.GameTranslatorPandas.translate(split_data)
                 #print("formatted data", formatted_data)
                 #formatted_data = self.GameTranslator.translate(split_data)
                 #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
-                return
             case "SAVE_MOVE":
-                #print('here')
+                print('In SAVE_MOVE')
                 formatted_data = self.GameTranslatorPandas.translate(split_data)
                 #formatted_data = self.GameTranslator.translate(split_data, True)
-                #print("Here is the formatted data to save:", formatted_data)
-                return
+                print("Here is the formatted data to save:", formatted_data)
+                response = "SAVED_TURN_DATA"
             case _:
                 print("Unsupported command:", split_data[0])
-                return
+        return response
         
         
 
