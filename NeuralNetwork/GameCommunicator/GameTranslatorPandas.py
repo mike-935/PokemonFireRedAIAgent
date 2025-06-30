@@ -8,6 +8,7 @@ class GameTranslatorPandas:
         #self.move_types = self.create_move_types_list()
         
     def translate(self, message, training=False):
+        print("[TRANSLATE] translate() called.")
         battle_data = list(map(float, message[1:]))
         #print("battle_data:", battle_data)
         #battle_data[-1] = battle_data[-1].strip()
@@ -49,6 +50,14 @@ class GameTranslatorPandas:
             "spd": 2016
         }
         
+        #normalizing current hp for all pokemon
+        df["p_cur_hp"] = df["p_cur_hp"] / df["p_hp"]
+        df["o_cur_hp"] = df["o_cur_hp"] / df["o_hp"]
+        
+        for i in range(2,7):
+            df[f"p{i}_cur_hp"] = df[f"p{i}_cur_hp"] / df[f"p{i}_hp"]
+        
+        
         #Grabbing different prefixes for each 
         normalization_columns = ["p", "o"] + [f"p{i}" for i in range(2,7)]
         
@@ -59,9 +68,6 @@ class GameTranslatorPandas:
                 if stat in df.columns:
                     df[stat] = df[stat] / factor
         
-        
-        df["p_cur_hp"] = df["p_cur_hp"] / df["p_hp"]
-        df["o_cur_hp"] = df["o_cur_hp"] / df["o_hp"]
         
         type_columns = [
             "p_type1", "p_type2", "o_type1", "o_type2"
@@ -74,7 +80,8 @@ class GameTranslatorPandas:
             
         df = self.one_hot_type(df, type_columns)
             
-        df.to_csv("battle_data_onehottest.csv", index=False)
+        file_path = os.path.join(self.root_dir, "battle_data.csv")
+        df.to_csv(file_path, mode="a", header=not os.path.exists(file_path), index=False)
         return df
 
     
