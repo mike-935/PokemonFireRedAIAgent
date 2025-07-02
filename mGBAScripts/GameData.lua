@@ -986,7 +986,7 @@ function Update()
 
         -- If we are in training mode, we send the turn data to the server
         if TrainingMode and not SocketCommunicating then
-            console:log("Sending turn data for training...")
+            console:log("Sending turn   data for training...")
             SocketCommunicating = true
             Game:contactPythonSocket(currentActivePlayerPokemon)
             console:log("Turn Data sent for training!")

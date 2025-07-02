@@ -1,10 +1,12 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
+import pandas as pd
 
 class Network(nn.Module):
-    def __init__(self, input_size=172, hidden_layer1=10, hidden_layer2=12, output_size = 4):
+    def __init__(self, df, input_size=172, hidden_layer1=10, hidden_layer2=12, output_size = 4):
         super().__init__()
+        self.df = pd.read_csv("../battle_data.csv")
         self.connection1 = nn.Linear(input_size, hidden_layer1)
         self.connection2 = nn.Linear(hidden_layer1, hidden_layer2)
         self.out = nn.Linear(hidden_layer2, output_size)
