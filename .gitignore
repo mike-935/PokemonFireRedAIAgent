@@ -178,3 +178,4 @@ cython_debug/
 .idea/
 
 .DS_Store
+battle_data.csv

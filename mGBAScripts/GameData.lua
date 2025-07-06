@@ -47,6 +47,10 @@ emu.memory.cart0:readRange
 This will read from the actual emulator memory which is dynamic and changes
 emu:readX()
 
+& 0x7F Gets you 7 bits from whatever you are working with as 0x7F in binary is 01111111
+& 0xF gets you 4 bits as it is 00001111 in binary
+& 0x1 is 1 bit as it is 00000001 in binary
+
 --]]
 
 
@@ -355,6 +359,12 @@ function GameData.getPokemonData(game, pokemonAddress)
         -- and then only get the lower 8 bits of that (special defense)
 		(substruct2[1] >> 8) & 0xFF,
 	}
+
+    ability1 = emu:read8(addrOffset + 22)
+    ability2 = emu:read8(addrOffset + 23)
+    abilityID = (substruct3[1] >> 31) & 1
+    pokemon.ability = (abilityID == 0) and ability1 or ability2
+
     return pokemon
 end
 
@@ -387,6 +397,18 @@ end
 Sends a message to the python socket with the current turn data
 if we are on training mode it sends the old turn data and the move made for that turn
 otherwise it sends the current turn data and requests a move
+Sends data in the form of:
+____________________________________________________________________________
+Player Pokemon      |   type, type2, level, ability, status,               |
+                    |   currenthp, hp, atk, def, spatk, spdef,             |
+                    |   spd, moveXID, moveEffectID,moveXType, moveXDamage, |
+                    |   moveXAccuracy, moveXpp                             |
+                    |                                                      |
+Opponent Pokemon    |   type, type2, level, ability, status, currenthp,    |
+                    |   hp, atk, def, spatk, spdef, spd                    |
+Party Pokemon (2-6) |   type, type2, level, ability, status, currenthp,    |
+                    |   hp, atk, def, spatk, spdef, spd, switchable        |
+----------------------------------------------------------------------------
 --]]
 function GameData.contactPythonSocket(game, currentPokemon)
     console:log("Preparing to message python...")
@@ -414,6 +436,12 @@ function GameData.contactPythonSocket(game, currentPokemon)
         -- Add the choice that the player made for the turn
         local playerDecision = game:getTurnDecision(currentPokemon)
         table.insert(battleData, playerDecision)
+    end
+
+    for i, v in ipairs(battleData) do
+        if v == nil then
+            console:log(string.format("Data[%d] is nil", i))
+        end
     end
 
 
@@ -501,6 +529,7 @@ function GameData.getTurnDecision(game, currentPokemon)
     return decision
 end
 
+
 -- If the player did not choose a move, find which pokemon they switched to
 function GameData.getSwitchChoice(game, currentPokemon)
     console:log("Chosen move index is -1, this means the last used move was not found in the player's moves! or maybe it means switched")
@@ -518,7 +547,7 @@ function GameData.getSwitchChoice(game, currentPokemon)
     end
     -- we return index + 3 to indicate a switch as part of the player decision field
     console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 3))
-    return leftOwn + 3
+    return leftOwn + 2
 end
 
 -- get the current turn's data,
@@ -541,16 +570,6 @@ end
 --[[
 Format's the pokemon data for the player and opponent in a format that can be sent to the server
 to Request the Neural Network for what choice the player should make
-____________________________________________________________________________
-Player Pokemon      |   type, type2, level, status, currenthp, hp,         |
-                    |   atk, def, spatk, spdef, spd, moveXID, moveEffectID,|
-                    |   moveXType, moveXDamage, moveXAccuracy, moveXpp     |
-                    |                                                      |
-Opponent Pokemon    |   type, type2, level, status, currenthp, hp, atk,    |
-                    |   def, spatk, spdef, spd                             |
-Party Pokemon (2-6) |   type, type2, level, status, currenthp, hp, atk,    |
-                    |    def, spatk, spdef, spd, switchable                |
-----------------------------------------------------------------------------
 function GameData.requestAIMove(game, currentPokemon)
     console:log("Requesting AI move for current Pokemon...")
 
@@ -582,21 +601,22 @@ end
 -- that clarifies if the pokemon is switchable or not
 function GameData.formatPlayerPartyPokemon(game, playerPokemon)
     -- Get all the player pokemon's data in the format of:
-    -- type, type2, level, status, currnethp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
+    -- type, type2, level, ability, status, currnethp, hp, atk, def, spatk, spdef, spd, moveXID, moveEffectID, moveXType, moveXDamage, moveXAccuracy, moveXpp
     local playerPokemonData = {}
 
     -- if not active we need to first check if the pokemon is alive or not
-    -- if they are then we send type1, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd, 1
+    -- if they are then we send type1, type2, level, ability, status, currenthp, hp, atk, def, spatk, spdef, spd, 1
     -- if they are not then we send 0 for all stats
     if playerPokemon.species == 0 then
         console:log("Pokemon is null")
-        for i = 1, 12 do
+        for i = 1, 13 do
             table.insert(playerPokemonData, 0)
         end
     else
         table.insert(playerPokemonData, playerPokemon.type1)
         table.insert(playerPokemonData, playerPokemon.type2)
         table.insert(playerPokemonData, playerPokemon.level)
+        table.insert(playerPokemonData, playerPokemon.ability)
         table.insert(playerPokemonData, playerPokemon.status)
         table.insert(playerPokemonData, playerPokemon.hp)
         -- If not active, just add the base stats
@@ -616,12 +636,13 @@ function GameData.formatActivePokemon(game, pokemon, playerPokemon)
     table.insert(pokemonData, pokemon.type1)
     table.insert(pokemonData, pokemon.type2)
     table.insert(pokemonData, pokemon.level)
+    table.insert(pokemonData, pokemon.ability)
     table.insert(pokemonData, pokemon.status)
     table.insert(pokemonData, pokemon.hp)
 
-    local statStageAddress = Game.opposingBattleStruct + 24
+    local statStageAddress = Game.opponentBattlePokemonStruct + 24
     if playerPokemon then
-        statStageAddress = Game.playerBattleStruct + 24
+        statStageAddress = Game.playerBattlePokemonStruct + 24
     end
 
     -- get the pokemon's stat stages (treated as -6-+6) that affect the stats
@@ -672,7 +693,7 @@ end
 
 --
 function GameData.formatOpponentPokemon(game, opponentPokemon)
-    local opposingStatStageAddress = Game.opposingBattleStruct + 24
+    local opposingStatStageAddress = Game.opponentBattlePokemonStruct + 24
     local opponentPokemonStatStages = {
         -- hp
         emu:read8(opposingStatStageAddress),
@@ -691,11 +712,12 @@ function GameData.formatOpponentPokemon(game, opponentPokemon)
     }
 
     -- format the opponent pokemon as:
-    -- type, type2, level, status, currenthp, hp, atk, def, spatk, spdef, spd
+    -- type, type2, level, ability, status, currenthp, hp, atk, def, spatk, spdef, spd
     local opponentPokemonData = {
         opponentPokemon.type1,
         opponentPokemon.type2,
         opponentPokemon.level,
+        opponentPokemon.ability,
         opponentPokemon.status,
         opponentPokemon.hp
     }
@@ -813,9 +835,9 @@ function InitializeGame()
         -- Address that holds the count of battlers?
         battlersCount = 0x2023BCC,
         -- Address representing the battle struct for the player's pokemon
-        playerBattleStruct = 0x2023BE4,
+        playerBattlePokemonStruct = 0x2023BE4,
         -- Address representing the battle struct for the opposing pokemon
-        opposingBattleStruct = 0x2023C3C,
+        opponentBattlePokemonStruct = 0x2023C3C,
         -- Address for the battle results
         battleResults = 0x3004F90,
         -- Address for the current battle's turn count
@@ -824,6 +846,9 @@ function InitializeGame()
         lastUsedMove = 0x3004FB2,
         -- Address for the indexs of the 4 pokemon in a double battle
         battlerPartyIndexes = 0x2023BCE
+
+        -- When 0x200E728 changes we are in pokemon party menu
+
     })
     if not Game then
         console:error("Failed to initialize game data!")

@@ -20,17 +20,17 @@ class GameTranslatorPandas:
         # need to know if in doubles and the status of each pokemon
         # maybe include stuff like weather, terrain, etc.
         columns = [
-            "p_type1", "p_type2", "p_level", "p_status", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd", 
+            "p_type1", "p_type2", "p_level", "p_ability" , "p_status", "p_cur_hp", "p_hp", "p_atk", "p_def", "p_spatk", "p_spdef", "p_spd",
             "p_mvID1", "p_mvEID1", "p_mvType1", "p_mvDmg1", "p_mvAcc1", "p_mvPP1", 
             "p_mvID2", "p_mvEID2", "p_mvType2", "p_mvDmg2", "p_mvAcc2", "p_mvPP2", 
             "p_mvID3", "p_mvEID3", "p_mvType3", "p_mvDmg3", "p_mvAcc3", "p_mvPP3",
             "p_mvID4", "p_mvEID4", "p_mvType4", "p_mvDmg4", "p_mvAcc4", "p_mvPP4",
-            "o_type1", "o_type2", "o_level", "o_status", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd", 
-            "p2_type1", "p2_type2", "p2_level", "p2_status", "p2_cur_hp", "p2_hp", "p2_atk", "p2_def", "p2_spatk", "p2_spdef", "p2_spd", "p2_switchable",
-            "p3_type1", "p3_type2", "p3_level", "p3_status", "p3_cur_hp", "p3_hp", "p3_atk", "p3_def", "p3_spatk", "p3_spdef", "p3_spd", "p3_switchable",
-            "p4_type1", "p4_type2", "p4_level", "p4_status", "p4_cur_hp", "p4_hp", "p4_atk", "p4_def", "p4_spatk", "p4_spdef", "p4_spd", "p4_switchable",
-            "p5_type1", "p5_type2", "p5_level", "p5_status", "p5_cur_hp", "p5_hp", "p5_atk", "p5_def", "p5_spatk", "p5_spdef", "p5_spd", "p5_switchable",
-            "p6_type1", "p6_type2", "p6_level", "p6_status", "p6_cur_hp", "p6_hp", "p6_atk", "p6_def", "p6_spatk", "p6_spdef", "p6_spd", "p6_switchable",
+            "o_type1", "o_type2", "o_level", "o_ability" , "o_status", "o_cur_hp", "o_hp", "o_atk", "o_def", "o_spatk", "o_spdef", "o_spd",
+            "p2_type1", "p2_type2", "p2_level", "p2_ability" , "p2_status", "p2_cur_hp", "p2_hp", "p2_atk", "p2_def", "p2_spatk", "p2_spdef", "p2_spd", "p2_switchable",
+            "p3_type1", "p3_type2", "p3_level", "p3_ability" , "p3_status", "p3_cur_hp", "p3_hp", "p3_atk", "p3_def", "p3_spatk", "p3_spdef", "p3_spd", "p3_switchable",
+            "p4_type1", "p4_type2", "p4_level", "p4_ability" , "p4_status", "p4_cur_hp", "p4_hp", "p4_atk", "p4_def", "p4_spatk", "p4_spdef", "p4_spd", "p4_switchable",
+            "p5_type1", "p5_type2", "p5_level", "p5_ability" , "p5_status", "p5_cur_hp", "p5_hp", "p5_atk", "p5_def", "p5_spatk", "p5_spdef", "p5_spd", "p5_switchable",
+            "p6_type1", "p6_type2", "p6_level", "p6_ability" , "p6_status", "p6_cur_hp", "p6_hp", "p6_atk", "p6_def", "p6_spatk", "p6_spdef", "p6_spd", "p6_switchable",
             "player_choice"
         ]
 
@@ -55,6 +55,10 @@ class GameTranslatorPandas:
         df["o_cur_hp"] = df["o_cur_hp"] / df["o_hp"]
         
         for i in range(2,7):
+            if df[f"p{i}_hp"] == 0:
+                print(f"Warning: p{i}_hp is zero, setting p{i}_cur_hp to 0 to avoid division by zero.")
+                df[f"p{i}_cur_hp"] = 0
+                continue
             df[f"p{i}_cur_hp"] = df[f"p{i}_cur_hp"] / df[f"p{i}_hp"]
         
         
