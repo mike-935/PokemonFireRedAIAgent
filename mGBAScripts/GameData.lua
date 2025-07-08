@@ -436,6 +436,8 @@ function GameData.contactPythonSocket(game, currentPokemon)
         -- Add the choice that the player made for the turn
         local playerDecision = game:getTurnDecision(currentPokemon)
         table.insert(battleData, playerDecision)
+    else
+        table.insert(battleData, -1)
     end
 
     for i, v in ipairs(battleData) do
@@ -749,6 +751,70 @@ function GameData.moveAsList(game, pokemon, index)
     return moveData
 end
 
+--[[
+Not the best way to check if the cursor is in the pokemon party, bag, or a move
+-- When 0x200E728 changes 38 means in pokemon party and 14 is bag
+        -- Topleft: 0x200F4F6 = 0x01, 0x200F536=0x02, 0x200F576=0x20, and 0x200F5B6=0x20
+        -- Bottomleft: 0x200F4F6 = 0x20, 0x200F536=0x20, 0x200F576=0x01, and 0x200F5B6=0x02
+        -- TopRight: 0x200F4F6 = 0x20, 0x200F508=0x01, 0x200F536=0x20, and 0x200F548=0x02
+        -- BottomRight: 0x200F508=0x20, 0x200F548=0x20, 0x200F588=0x01, and 0x200F5C8=0x02
+--]]
+function GameData.getCursorSelection(game)
+    if readBattleAddress() ~= 0 then
+        return -1
+    end
+
+    local inPartyOrBag = emu:read8(0x200E728)
+    console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
+
+    if inPartyOrBag == 0x38 then
+        console:log("Cursor is in the Pokemon Party")
+        return 4
+    elseif inPartyOrBag == 0x14 then
+        console:log("Cursor is in the Bag")
+        return 5
+    else
+        console:log("Cursor is not in the Pokemon Party or Bag, it is in the Moves")
+        local topLeftMove = emu:read8(0x200F4F6) == 0x01 and
+                            emu:read8(0x200F536) == 0x02 and
+                            emu:read8(0x200F576) == 0x20 and
+                            emu:read8(0x200F5B6) == 0x20
+        if topLeftMove then
+            console:log("Cursor is in the Top Left Move")
+            return 0
+        end
+
+        local bottomLeftMove = emu:read8(0x200F4F6) == 0x20 and
+                               emu:read8(0x200F536) == 0x20 and
+                               emu:read8(0x200F576) == 0x01 and
+                               emu:read8(0x200F5B6) == 0x02
+        if bottomLeftMove then
+            console:log("Cursor is in the Bottom Left Move")
+            return 1
+        end
+
+        local topRightMove = emu:read8(0x200F4F6) == 0x20 and
+                             emu:read8(0x200F508) == 0x01 and
+                             emu:read8(0x200F536) == 0x20 and
+                             emu:read8(0x200F548) == 0x02
+        if topRightMove then
+            console:log("Cursor is in the Top Right Move")
+            return 2
+        end
+
+        local bottomRightMove = emu:read8(0x200F508) == 0x20 and
+                                emu:read8(0x200F548) == 0x20 and
+                                emu:read8(0x200F588) == 0x01 and
+                                emu:read8(0x200F5C8) == 0x02
+        if bottomRightMove then
+            console:log("Cursor is in the Bottom Right Move")
+            return 3
+        end
+        console:log("Player is in the battle's menu")
+        return 6
+    end
+end
+
 -- Gets the effective stat of a pokemon by using the stat stage
 function getEffectiveStat(base, stage)
     if base == nil or stage == nil then
@@ -790,8 +856,6 @@ function tableAsString(data)
     for _,data in ipairs(data) do
         stringFormat = stringFormat .. "%s,"
     end
-
-
 
     -- Remove the last comma
     stringFormat = string.sub(stringFormat, 1, -2)
@@ -847,8 +911,6 @@ function InitializeGame()
         -- Address for the indexs of the 4 pokemon in a double battle
         battlerPartyIndexes = 0x2023BCE
 
-        -- When 0x200E728 changes we are in pokemon party menu
-
     })
     if not Game then
         console:error("Failed to initialize game data!")
@@ -879,6 +941,7 @@ function InitializeGame()
     TrainingMode = false
     InCombat = false
     InBattle = readBattleAddress()
+    CurrentBattleMenuSelect = -1
     console:log("Game initialized successfully!")
 end
 
@@ -979,6 +1042,13 @@ function Update()
         console:log("First entering battle!")
         InBattle = readBattleAddress()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
+        CurrentBattleMenuSelect = Game:getCursorSelection()
+    end
+
+    if readBattleAddress() == 0 and Game:getCursorSelection() ~= CurrentBattleMenuSelect then
+        console:log("Battle Menu Selection Changed!")
+        console:log(string.format("Current Battle Menu Selection: %d, Previous Battle Menu Selection: %d", Game:getCursorSelection(), CurrentBattleMenuSelect))
+        CurrentBattleMenuSelect = Game:getCursorSelection()
     end
 
 
@@ -1028,6 +1098,7 @@ function Update()
     if InBattle ~= readBattleAddress() and readBattleAddress() ~= 0 then
         console:log("Battle Ended in the first turn, so we need to send if necessary")
         FirstTurn = false
+        CurrentBattleMenuSelect = -1
         -- If we are in training mode, we send the turn data to the server
         if TrainingMode and not SocketCommunicating then
             console:log("Sending turn data for training...")

@@ -21,7 +21,7 @@ class EmuRelay:
         self.GameTranslatorPandas = GameTranslatorPandas()
         torch.manual_seed(37)
         self.neural_network = Network.Network()
-        self.neural_network.train_test_network()
+        # self.neural_network.train_test_network()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server
