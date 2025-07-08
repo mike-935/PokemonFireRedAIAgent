@@ -55,10 +55,10 @@ class GameTranslatorPandas:
         df["o_cur_hp"] = df["o_cur_hp"] / df["o_hp"]
         
         for i in range(2,7):
-            if df[f"p{i}_hp"] == 0:
-                print(f"Warning: p{i}_hp is zero, setting p{i}_cur_hp to 0 to avoid division by zero.")
-                df[f"p{i}_cur_hp"] = 0
-                continue
+            # if df[f"p{i}_hp"] == 0:
+            #     print(f"Warning: p{i}_hp is zero, setting p{i}_cur_hp to 0 to avoid division by zero.")
+            #     df[f"p{i}_cur_hp"] = 0
+            #     continue
             df[f"p{i}_cur_hp"] = df[f"p{i}_cur_hp"] / df[f"p{i}_hp"]
         
         

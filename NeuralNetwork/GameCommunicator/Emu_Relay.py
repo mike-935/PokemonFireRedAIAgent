@@ -6,7 +6,7 @@ from http.client import responses
 import torch
 from .GameTranslator import GameTranslator
 from .GameTranslatorPandas import GameTranslatorPandas
-from NeuralNetwork import Network
+import Network
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -77,7 +77,7 @@ class EmuRelay:
         print("Parsing input data:")
         split_data = data.split(",")
         response = "ERROR"
-        #print('split data: ', split_data)
+        print('split data: ', split_data)
         match split_data[0]:
             case "REQUEST_AI_MOVE":
                 print('IN REQUEST_AI_MOVE')
