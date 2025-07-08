@@ -10,7 +10,7 @@ import numpy as np
 class Network(nn.Module):
     def __init__(self, input_size=509, hidden_layer1=10, hidden_layer2=12, output_size = 9):
         super().__init__()
-        self.df = pd.read_csv("../battle_data.csv")
+        #self.df = pd.read_csv("battle_data.csv")
         self.move_effect_embeddings = nn.Embedding(214, 16)
         self.ability_embeddings = nn.Embedding(78, 8)
         self.status_embeddings = nn.Embedding(60, 8)
@@ -76,11 +76,17 @@ class Network(nn.Module):
         return x
 
     def train_test_network(self):
+        file_path = "battle_data.csv"
+        if not os.path.exists(file_path):
+            print(f"Training skipped: '{file_path}' not found.")
+            return
+        
         print("Training the network...")
         self.train()
+        df = pd.read_csv(file_path)
 
         (training_numerical, training_move_effects,
-         training_abilities, training_statuses, training_player_choice) = self.format_datasets(self.df)
+         training_abilities, training_statuses, training_player_choice) = self.format_datasets(df)
         '''
         print(f"Training numerical is: {training_numerical}")
         # np.savetxt('readable_tensor.txt', training_numerical.numpy(), delimiter=',', fmt='%.4f')
