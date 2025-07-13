@@ -51,6 +51,11 @@ emu:readX()
 & 0xF gets you 4 bits as it is 00001111 in binary
 & 0x1 is 1 bit as it is 00000001 in binary
 
+
+References:
+- https://github.com/besteon/Ironmon-Tracker
+- https://www.reddit.com/r/pokemonrng/comments/172n3ec/pokemon_gen3_lua_script_for_mgba/
+- https://github.com/pret/pokefirered
 --]]
 
 
@@ -442,7 +447,9 @@ function GameData.contactPythonSocket(game, currentPokemon)
 
     for i, v in ipairs(battleData) do
         if v == nil then
-            console:log(string.format("Data[%d] is nil", i))
+            console:error(string.format("Data[%d] is nil", i))
+        elseif v == -1 then
+            console:error(string.format("Data[%d] is -1", i))
         end
     end
 
@@ -528,6 +535,10 @@ function GameData.getTurnDecision(game, currentPokemon)
         console:log("Chosen move index is: " .. chosenMoveIndex)
         decision = chosenMoveIndex
     end
+
+    if decision == -1 then
+        console:error("No move or switch was found for the player in the current turn!")
+    end
     return decision
 end
 
@@ -547,7 +558,7 @@ function GameData.getSwitchChoice(game, currentPokemon)
     else
         console:error("Current Pokemon is the same as the old Pokemon, this should not happen!")
     end
-    -- we return index + 3 to indicate a switch as part of the player decision field
+    -- we return index + 2 to indicate a switch as part of the player decision field
     console:log(string.format("Switched to index %d which is treated as %d", leftOwn, leftOwn + 3))
     return leftOwn + 2
 end
@@ -765,22 +776,22 @@ function GameData.getCursorSelection(game)
     end
 
     local inPartyOrBag = emu:read8(0x200E728)
-    console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
+    -- console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
 
     if inPartyOrBag == 0x38 then
-        console:log("Cursor is in the Pokemon Party")
+        -- console:log("Cursor is in the Pokemon Party")
         return 4
     elseif inPartyOrBag == 0x14 then
-        console:log("Cursor is in the Bag")
+        --console:log("Cursor is in the Bag")
         return 5
     else
-        console:log("Cursor is not in the Pokemon Party or Bag, it is in the Moves")
+        --console:log("Cursor is not in the Pokemon Party or Bag, it is in the Moves")
         local topLeftMove = emu:read8(0x200F4F6) == 0x01 and
                             emu:read8(0x200F536) == 0x02 and
                             emu:read8(0x200F576) == 0x20 and
                             emu:read8(0x200F5B6) == 0x20
         if topLeftMove then
-            console:log("Cursor is in the Top Left Move")
+            --console:log("Cursor is in the Top Left Move")
             return 0
         end
 
@@ -789,7 +800,7 @@ function GameData.getCursorSelection(game)
                                emu:read8(0x200F576) == 0x01 and
                                emu:read8(0x200F5B6) == 0x02
         if bottomLeftMove then
-            console:log("Cursor is in the Bottom Left Move")
+            --console:log("Cursor is in the Bottom Left Move")
             return 1
         end
 
@@ -798,7 +809,7 @@ function GameData.getCursorSelection(game)
                              emu:read8(0x200F536) == 0x20 and
                              emu:read8(0x200F548) == 0x02
         if topRightMove then
-            console:log("Cursor is in the Top Right Move")
+            --console:log("Cursor is in the Top Right Move")
             return 2
         end
 
@@ -807,12 +818,23 @@ function GameData.getCursorSelection(game)
                                 emu:read8(0x200F588) == 0x01 and
                                 emu:read8(0x200F5C8) == 0x02
         if bottomRightMove then
-            console:log("Cursor is in the Bottom Right Move")
+            --console:log("Cursor is in the Bottom Right Move")
             return 3
         end
-        console:log("Player is in the battle's menu")
+        --console:log("Player is in the battle's menu")
         return 6
     end
+end
+
+-- Checks if the player is in the Safari Zone
+function GameData.checkIfInSafariZone(game)
+    local saveBlock = emu:read32(game.saveBlockPtr)
+    local safariOffset = 0x800 + 0x0
+    local flagOffset = 0x0EE0
+    local safariZoneAddress = saveBlock + flagOffset + math.floor(safariOffset / 8)
+    local safariBit = safariOffset % 8
+    local safariZoneFlag = emu:read8(safariZoneAddress)
+    return math.floor((safariZoneFlag >> safariBit) % 2) ~= 0
 end
 
 -- Gets the effective stat of a pokemon by using the stat stage
@@ -909,7 +931,8 @@ function InitializeGame()
         -- Address for the last used move in the current battle
         lastUsedMove = 0x3004FB2,
         -- Address for the indexs of the 4 pokemon in a double battle
-        battlerPartyIndexes = 0x2023BCE
+        battlerPartyIndexes = 0x2023BCE,
+        saveBlockPtr = 0x3005008
 
     })
     if not Game then
@@ -1038,8 +1061,18 @@ function Update()
         return
     end
 
-    if InBattle ~= readBattleAddress() and readBattleAddress() == 0 then
+    if InBattle ~= readBattleAddress() and readBattleAddress() == 0 and not Game:checkIfInSafariZone() then
         console:log("First entering battle!")
+        console:log(string.format("Battler count: %d, Our pokemon species %s", Game:getBattlersCount(), emu:read16(Game.playerBattlePokemonStruct)))
+        console:log(string.format("If in Safari: %s", Game:checkIfInSafariZone()))
+        local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
+        local leftOwnPoke = Game:getPokemonData(Pokemon[leftOwn][2])
+        console:log(string.format("Left Own Pokemon: %s, Species: %d", Game:getPokemonName(leftOwnPoke.species), leftOwnPoke.species))
+
+        local rightOther = emu:read8(Game.battlerPartyIndexes + 2) + 1
+        local rightOtherPokemon = Game:getPokemonData(Pokemon[0][2] + ((rightOther - 1) * 100))
+        console:log(string.format("Right Other Pokemon: %s, Species: %d", Game:getPokemonName(rightOtherPokemon.species), rightOtherPokemon.species))
+
         InBattle = readBattleAddress()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
         CurrentBattleMenuSelect = Game:getCursorSelection()
@@ -1060,7 +1093,7 @@ function Update()
     TrainingMode: we send the data of the last turn and the move made during it and save it in python
     At the end we need to update the turn data and the active pokemon of the turn
     --]]
-    if CurrentTurn ~= getTurnCount() and readBattleAddress() == 0 and Game:getBattlersCount() == 2 then
+    if CurrentTurn ~= getTurnCount() and readBattleAddress() == 0 and Game:getBattlersCount() == 2 and not Game:checkIfInSafariZone() then
         console:log(string.format("Turn Changed, Current Turn: %i, Previous Turn: %i, Last Used Move ID: %i", getTurnCount(), CurrentTurn, getLastUsedMoveID()))
         CurrentTurn = getTurnCount()
         if FirstTurn then
@@ -1095,7 +1128,7 @@ function Update()
     -- Make sure to still send last turn data if we are in training mode
     -- Basically just for if a battle ends before the end of the first turn
     -- and for the last turn of the battle
-    if InBattle ~= readBattleAddress() and readBattleAddress() ~= 0 then
+    if InBattle ~= readBattleAddress() and readBattleAddress() ~= 0 and Game:getBattlersCount() == 2 and not Game:checkIfInSafariZone() then
         console:log("Battle Ended in the first turn, so we need to send if necessary")
         FirstTurn = false
         CurrentBattleMenuSelect = -1
@@ -1107,31 +1140,6 @@ function Update()
             console:log("Turn Data sent for training!")
         end
     end
-
-    --[[]
-    if UseBattleAI then
-        if not SocketCommunicating then
-            console:log("AI will attempt to make a move!")
-            SocketCommunicating = true
-            playerPokemon = Game:getPokemonData(CurrentPokemon)
-            Game:requestAIMove(playerPokemon, false)
-            -- On message receive turn off SocketCommunicating
-        end
-    end
-    --]]
-
-
-
-    --[[
-    if readBattleAddress() == 0 and UseBattleAI then
-        if not SocketCommunicating then
-            console:log("AI will attempt to make a move!")
-            SocketCommunicating = true
-            Game:requestAIMove(CurrentPokemon)
-            -- On message receive turn off SocketCommunicating
-        end
-    end
-    --]]
 
     -- need to check if we entered battle and if we are still in battle and when things/turn changes
     if Prev==nil or Prev~=emu:read32(CurrentPokemon) or PrevExp~=Game:getPokemonData(CurrentPokemon).experience or Frame < 5 or InBattle~=readBattleAddress() then
@@ -1168,6 +1176,23 @@ function printPokeStatus(game, buffer, pkm)
 	end
 	--]]
 	local currentPokemon = game:getPokemonData(pkm)
+	local partyPokemon = {
+        [0] = game:getPokemonData(Pokemon[1][2]),
+        [1] = game:getPokemonData(Pokemon[2][2]),
+        [2] = game:getPokemonData(Pokemon[3][2]),
+        [3] = game:getPokemonData(Pokemon[4][2]),
+        [4] = game:getPokemonData(Pokemon[5][2]),
+        [5] = game:getPokemonData(Pokemon[6][2]),
+    }
+
+    for i = 0, 5 do
+        local pokemon = partyPokemon[i]
+        buffer:print(string.format("Party Pokemon %d: Species: %s\n",
+        i + 1, pokemon.species))
+
+    end
+
+    --[[
 	local inBattle = readBattleAddress()
 	for i = 1, 4 do
 		local move = currentPokemon.moves[i]
@@ -1196,6 +1221,7 @@ function printPokeStatus(game, buffer, pkm)
 		buffer:print(string.format("Move %i: %-15s Damage: %-5s Type:%-7s Accuracy %-5s Effect ID: %-2s, Target: 0x%02X\n",
 		i, name, damage, attackType, accuracy, effectID, target))
 	end
+    --]]
     local type1 = currentPokemon.type1
 	local type2 = currentPokemon.type2
 	buffer:print(string.format("Type 1: %-7s Type 2: %-7s\n", type1, type2))
