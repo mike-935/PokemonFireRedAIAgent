@@ -76,32 +76,20 @@ class Network(nn.Module):
         return x
 
     def train_test_network(self):
-        file_path = "battle_data.csv"
-        if not os.path.exists(file_path):
-            print(f"Training skipped: '{file_path}' not found.")
+        battle_data_csv_file = "battle_data.csv"
+        current_directory = os.path.dirname(__file__)
+        absolute_battle_data_path = os.path.abspath(os.path.join(current_directory, '..', battle_data_csv_file))
+        if not os.path.exists(absolute_battle_data_path):
+            print(f"Training skipped: '{battle_data_csv_file}' not found.")
             return
         
         print("Training the network...")
         self.train()
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(absolute_battle_data_path)
 
         (training_numerical, training_move_effects,
          training_abilities, training_statuses, training_player_choice) = self.format_datasets(df)
-        '''
-        print(f"Training numerical is: {training_numerical}")
-        # np.savetxt('readable_tensor.txt', training_numerical.numpy(), delimiter=',', fmt='%.4f')
-        print("Any NaNs in numerical data:", torch.isnan(training_numerical).any().item())
-        print("Any NaNs in move effects:", torch.isnan(training_move_effects).any().item())
-        print("Any NaNs in abilities:", torch.isnan(training_abilities).any().item())
-        print("Any NaNs in statuses:", torch.isnan(training_statuses).any().item())
-        print("Any NaNs in player choices:", torch.isnan(training_player_choice).any().item())
 
-        datalen = len(training_numerical) + len(training_move_effects) + len(training_abilities) + len(training_statuses)
-        print(f"The len of the data is {datalen}")
-        print("Using format_datasets, Split the data into numerical, move effects, abilities, statuses, and player choice.")
-        print("Min player_choice:", training_player_choice.min().item())
-        print("Max player_choice:", training_player_choice.max().item())
-        '''
         (x_training_numerical, x_testing_numerical,
          x_training_move_effects, x_testing_move_effects,
          x_training_abilities, x_testing_abilities,
@@ -216,6 +204,15 @@ class Network(nn.Module):
               f"out of {total_choices} total choices. With an accuracy of {accuracy:.2%}")
 
 
-
-    def test_network(self):
-        pass
+    def generate_ai_decision(self, formatted_battle_data):
+        (numerical_tensor, move_effect_tensor, ability_tensor, status_tensor,
+         player_choice_placeholder_tensor) = self.format_datasets(formatted_battle_data)
+        ai_decision = None
+        with torch.no_grad():
+            self.eval()
+            ai_decision = self(numerical_tensor, move_effect_tensor, ability_tensor, status_tensor)
+            print(f"AI Decision Scores: {ai_decision}")
+        # Get the index of the maximum score
+        ai_decision_max = ai_decision.argmax()
+        print(f"AI Decision Index: {ai_decision_max} and the .item() is {ai_decision_max.item()}")
+        return ai_decision_max.item()
