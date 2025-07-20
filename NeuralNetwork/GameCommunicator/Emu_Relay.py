@@ -7,6 +7,7 @@ import torch
 from .GameTranslator import GameTranslator
 from .GameTranslatorPandas import GameTranslatorPandas
 import Network
+import os
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -17,11 +18,11 @@ class EmuRelay:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((HOST, PORT))
         self.port = self.socket.getsockname()[1]
-        self.GameTranslator = GameTranslator()
         self.GameTranslatorPandas = GameTranslatorPandas()
         torch.manual_seed(37)
         self.neural_network = Network.Network()
         # self.neural_network.train_test_network()
+        self.GameTranslatorPandas.update_old_csv_with_status()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server
@@ -83,7 +84,7 @@ class EmuRelay:
                 print('IN REQUEST_AI_MOVE')
                 formatted_data = self.GameTranslatorPandas.translate(split_data)
                 print("This is the data for the move request:", formatted_data)
-                response = ""
+                # response = f"Decision: {str(self.neural_network.generate_ai_decision(formatted_data))}"
                 #formatted_data = self.GameTranslator.translate(split_data)
                 #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
             case "SAVE_MOVE":

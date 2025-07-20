@@ -99,12 +99,14 @@ class GameTranslatorPandas:
             2: 2,  # 2 turns of sleep left
             3: 3,  # 3 turns of sleep left
             4: 4,  # 4 turns of sleep left
-            5: 5,  # Not sure
-            8: 6,  # Poison
-            16: 7, # Burn
-            32: 8, # Frozen
-            64: 9, # Paralyzed
-            128: 10, # Toxic
+            5: 5,  # 5 turns of sleep left (Unlikely, but possible?)
+            6: 6,  # 6 turns of sleep left (Unlikely, but possible?)
+            7: 7,  # 7 turns of sleep left (Unlikely, but possible?)
+            8: 8,  # Poison
+            16: 9, # Burn
+            32: 10, # Frozen
+            64: 11, # Paralyzed
+            128: 12, # Toxic
         }
 
         for i in range(2, 7):
@@ -163,4 +165,38 @@ class GameTranslatorPandas:
                 effect_encoding_index = line.split(" ")[2]
                 effects.update({effect_id: effect_encoding_index})
         return effects
+
+    def update_old_csv_with_status(self):
+        battle_data_csv_file = "battle_data.csv"
+        current_directory = os.path.dirname(__file__)
+        absolute_battle_data_path = os.path.abspath(
+            os.path.join(current_directory, '..', '..', battle_data_csv_file))
+        dd = pd.read_csv(absolute_battle_data_path)
+        status_columns = [
+            "p_status", "o_status"
+        ]
+
+        status_indexes = {
+            0: 0,  # No status
+            1: 1,  # 1 turn of sleep left
+            2: 2,  # 2 turns of sleep left
+            3: 3,  # 3 turns of sleep left
+            4: 4,  # 4 turns of sleep left
+            5: 5,  # 5 turns of sleep left (Unlikely, but possible?)
+            6: 6,  # 6 turns of sleep left (Unlikely, but possible?)
+            7: 7,  # 7 turns of sleep left (Unlikely, but possible?)
+            8: 8,  # Poison
+            16: 9,  # Burn
+            32: 10,  # Frozen
+            64: 11,  # Paralyzed
+            128: 12,  # Toxic
+        }
+
+        for i in range(2, 7):
+            status_columns.append(f"p{i}_status")
+
+        dd = self.add_one_hot(dd, status_columns, status_indexes, size=11)
+        file_path = os.path.join(self.root_dir, "battle_data4.csv")
+        dd.to_csv(file_path, mode="w", header=not os.path.exists(file_path), index=False)
+        return None
 
