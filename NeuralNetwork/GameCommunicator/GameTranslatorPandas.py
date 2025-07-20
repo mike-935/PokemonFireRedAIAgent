@@ -7,13 +7,13 @@ class GameTranslatorPandas:
         #self.move_effects = self.create_effect_list()
         #self.move_types = self.create_move_types_list()
         
-    def translate(self, message, training=False):
-        print("[TRANSLATE] translate() called.")
+    def translate(self, message):
+        print(f"[TRANSLATE] translate() called., Command is {message[0]}")
         battle_data = list(map(float, message[1:]))
         #print("battle_data:", battle_data)
         #battle_data[-1] = battle_data[-1].strip()
-        
-        #[0.0, 2.0, 14.0, 18.0, 39.0, 19.0, 18.0, 15.0, 15.0, 22.0, 33.0, 0.0, 0.0, 35.0, 95.0, 35.0, 28.0, 23.0, 4.0, 0.0, 100.0, 15.0, 16.0, 149.0, 2.0, 40.0, 100.0, 35.0, 98.0, 
+
+        #[0.0, 2.0, 14.0, 18.0, 39.0, 19.0, 18.0, 15.0, 15.0, 22.0, 33.0, 0.0, 0.0, 35.0, 95.0, 35.0, 28.0, 23.0, 4.0, 0.0, 100.0, 15.0, 16.0, 149.0, 2.0, 40.0, 100.0, 35.0, 98.0,
         # 103.0, 0.0, 40.0, 100.0, 27.0, 1.0, 1.0, 
         # 7.0, 4.0, 23.0, 17.0, 9.0, 11.0, 10.0, 16.0, 3.0]
         # Moves are in wrong format?
@@ -81,14 +81,60 @@ class GameTranslatorPandas:
         for i in range(2, 7):
             type_columns.append(f"p{i}_type1")
             type_columns.append(f"p{i}_type2")
+
+        type_indexes = {}
+
+        for i in range(18):
+            type_indexes[i] = i
             
-        df = self.one_hot_type(df, type_columns)
+        df = self.add_one_hot(df, type_columns, type_indexes, 18)
+
+        status_columns = [
+            "p_status", "o_status"
+        ]
+
+        status_indexes = {
+            0: 0,  # No status
+            1: 1,  # 1 turn of sleep left
+            2: 2,  # 2 turns of sleep left
+            3: 3,  # 3 turns of sleep left
+            4: 4,  # 4 turns of sleep left
+            5: 5,  # Not sure
+            8: 6,  # Poison
+            16: 7, # Burn
+            32: 8, # Frozen
+            64: 9, # Paralyzed
+            128: 10, # Toxic
+        }
+
+        for i in range(2, 7):
+            status_columns.append(f"p{i}_status")
+
+        df = self.add_one_hot(df, status_columns, status_indexes, size=11)
             
         file_path = os.path.join(self.root_dir, "battle_data.csv")
-        df.to_csv(file_path, mode="a", header=not os.path.exists(file_path), index=False)
+        if message[0] == "SAVE_MOVE":
+            df.to_csv(file_path, mode="a", header=not os.path.exists(file_path), index=False)
+        elif message[0] == "REQUEST_AI_MOVE":
+            print(f"Not printing to file, as this is a request for AI move. Data: {df}")
         return df
 
-    
+    def one_hot_encode_data(self, data, indexes, size):
+        one_hot = [0] * size
+        data_to_encode = int(data)
+        if data_to_encode in indexes:
+            encoded_index = indexes.get(data_to_encode)
+            one_hot[encoded_index] = 1
+        return one_hot
+
+    def add_one_hot(self, dataframe, columns, indexes, size):
+        for col in columns:
+            one_hot_df = dataframe[col].apply(self.one_hot_encode_data, args=(indexes, size)).apply(pd.Series)
+            one_hot_df.columns = [f"{col}_{i}" for i in range(size)]
+            dataframe.drop(columns=[col], inplace=True)
+
+            dataframe = pd.concat([dataframe, one_hot_df], axis=1)
+        return dataframe
     
     def one_hot_encode(self, type_id, num_types=18):
         one_hot = [0] * num_types
