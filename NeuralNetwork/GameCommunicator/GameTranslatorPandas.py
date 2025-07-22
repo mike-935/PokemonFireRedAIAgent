@@ -112,9 +112,10 @@ class GameTranslatorPandas:
         for i in range(2, 7):
             status_columns.append(f"p{i}_status")
 
-        df = self.add_one_hot(df, status_columns, status_indexes, size=11)
+        df = self.add_one_hot(df, status_columns, status_indexes, size=13)
             
         file_path = os.path.join(self.root_dir, "battle_data.csv")
+        
         if message[0] == "SAVE_MOVE":
             df.to_csv(file_path, mode="a", header=not os.path.exists(file_path), index=False)
         elif message[0] == "REQUEST_AI_MOVE":
@@ -195,7 +196,7 @@ class GameTranslatorPandas:
         for i in range(2, 7):
             status_columns.append(f"p{i}_status")
 
-        dd = self.add_one_hot(dd, status_columns, status_indexes, size=11)
+        dd = self.add_one_hot(dd, status_columns, status_indexes, size=13)
         file_path = os.path.join(self.root_dir, "battle_data4.csv")
         dd.to_csv(file_path, mode="w", header=not os.path.exists(file_path), index=False)
         return None

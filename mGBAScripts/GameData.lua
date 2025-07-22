@@ -70,6 +70,10 @@ local GameData = {
     end 
 }
 
+MovePath = {}         -- full list of key steps
+CurrentMoveIndex = 1  -- index we're on in MovePath
+IsAwaitingKeyAck = false
+
 GBA_KEY = {
     A = 0,
     B = 1,
@@ -82,7 +86,6 @@ GBA_KEY = {
     R = 8,
     L = 9
 }
-
 
 -- Character map for converting byte values to characters
 GameData.charmap = { [0]=
@@ -373,6 +376,40 @@ function GameData.getPokemonData(game, pokemonAddress)
     return pokemon
 end
 
+function SendButtonPress(button) 
+    console:log("in send button")
+    if button == nil then
+        console:error("sendButtonPress: 'button' is nil!")
+        return
+    end
+    emu:addKey(button)
+    --emu:runFrame()
+    --emu:clearKey(button)
+end
+
+function GameData.moveCursor(game,targetMove)
+    console:log("In move cursor")
+    local currentMove = game:getCursorSelection()
+
+     local moveMap = {
+        [0] = { [1] = {0, 4}, [2] = {0, 7}, [3] = {0, 4, 7} },
+        [1] = { [0] = {0, }, [2] = {0, 5, 7}, [3] = {0, 4} },
+        [2] = { [0] = {0, 6}, [1] = {0, 4, 6}, [3] = {0, 4} },
+        [3] = { [0] = {5}, [1] = {0, 6}, [2] = {0, 5} }
+    }
+
+    if currentMove == -6 then
+        console:log("Unknown move")
+        return
+    end
+
+    local path = moveMap[currentMove][targetMove]
+
+    return path
+end
+
+
+
 --[[
 This function reads the battle address to determine if a battle is ongoing
 _____________________
@@ -458,7 +495,7 @@ function GameData.contactPythonSocket(game, currentPokemon)
     local pokemonData = tableAsString(battleData)
 
     for i, v in ipairs(battleData) do
-        console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
+        --console:log(string.format("Data[%d] = %s (type: %s)", i, tostring(v), type(v)))
     end
 
     console:log("Sending data: " .. pokemonData)
@@ -534,6 +571,7 @@ function GameData.getTurnDecision(game, currentPokemon)
     else
         console:log("Chosen move index is: " .. chosenMoveIndex)
         decision = chosenMoveIndex
+        --game.moveCursor(decision, getLastUsedMoveID())
     end
 
     if decision == -1 then
@@ -765,18 +803,48 @@ end
 --[[
 Not the best way to check if the cursor is in the pokemon party, bag, or a move
 -- When 0x200E728 changes 38 means in pokemon party and 14 is bag
-        -- Topleft: 0x200F4F6 = 0x01, 0x200F536=0x02, 0x200F576=0x20, and 0x200F5B6=0x20
-        -- Bottomleft: 0x200F4F6 = 0x20, 0x200F536=0x20, 0x200F576=0x01, and 0x200F5B6=0x02
-        -- TopRight: 0x200F4F6 = 0x20, 0x200F508=0x01, 0x200F536=0x20, and 0x200F548=0x02
-        -- BottomRight: 0x200F508=0x20, 0x200F548=0x20, 0x200F588=0x01, and 0x200F5C8=0x02
+        -- Topleft:     0x200F4F6 = 0x01,  0x200F508 = 0x20, 0x200F536 = 0x02, 0x200F548 = 0x20, 0x200F576 = 0x20, 0x200F588 = 0x20, 0x200F5B6 = 0x20, 0x200F5C8 = 0x20
+        -- Bottomleft:  0x200F4F6 = 0x20,  0x200F508 = 0x20, 0x200F536 = 0x20, 0x200F548 = 0x20, 0x200F576 = 0x01, 0x200F588 = 0x20, 0x200F5B6 = 0x02, 0x200F5C8 = 0x20
+        -- TopRight:    0x200F4F6 = 0x20,  0x200F508 = 0x01, 0x200F536 = 0x20, 0x200F548 = 0x02, 0x200F576 = 0x20, 0x200F588 = 0x20, 0x200F5B6 = 0x20, 0x200F5C8 = 0x20
+        -- BottomRight: 0x200F4F6 = 0x20,  0x200F508 = 0x20, 0x200F536 = 0x20, 0x200F548 = 0x20, 0x200F576 = 0x20, 0x200F588 = 0x01, 0x200F5B6 = 0x20, 0x200F5C8 = 0x02
 --]]
 function GameData.getCursorSelection(game)
     if readBattleAddress() ~= 0 then
         return -1
     end
 
+    local topLeft = {
+        addresses =  {0x200F4F6, 0x200f536},
+        values = {0x01, 0x02}
+    }
+
+    local topRight = {
+        addresses = {0x200F508, 0X200F548},
+        values = {0x01, 0x02}
+    }
+
+    local bottomLeft = {
+        addresses = {0x200F576, 0x200F5B6},
+        values = {0x01, 0x02}
+    }
+
+    local bottomRight = {
+        addresses = {0x200F588, 0x200F5C8},
+        values = {0x01, 0x02}
+    }
+
+    local function locateCursor(addresses, expectedPositions)
+        for i = 1, #addresses do
+            if emu:read8(addresses[i]) ~= expectedPositions[i] then
+                -- console:log("printed false")
+                return false
+            end
+        end
+        return true
+    end
+
     local inPartyOrBag = emu:read8(0x200E728)
-    -- console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
+    --console:log("Cursor is in: " .. string.format("%i", inPartyOrBag))
 
     if inPartyOrBag == 0x38 then
         -- console:log("Cursor is in the Pokemon Party")
@@ -786,38 +854,17 @@ function GameData.getCursorSelection(game)
         return 5
     else
         --console:log("Cursor is not in the Pokemon Party or Bag, it is in the Moves")
-        local topLeftMove = emu:read8(0x200F4F6) == 0x01 and
-                            emu:read8(0x200F536) == 0x02 and
-                            emu:read8(0x200F576) == 0x20 and
-                            emu:read8(0x200F5B6) == 0x20
-        if topLeftMove then
+
+        if locateCursor(topLeft.addresses, topLeft.values) then
             --console:log("Cursor is in the Top Left Move")
             return 0
-        end
-
-        local bottomLeftMove = emu:read8(0x200F4F6) == 0x20 and
-                               emu:read8(0x200F536) == 0x20 and
-                               emu:read8(0x200F576) == 0x01 and
-                               emu:read8(0x200F5B6) == 0x02
-        if bottomLeftMove then
-            --console:log("Cursor is in the Bottom Left Move")
-            return 1
-        end
-
-        local topRightMove = emu:read8(0x200F4F6) == 0x20 and
-                             emu:read8(0x200F508) == 0x01 and
-                             emu:read8(0x200F536) == 0x20 and
-                             emu:read8(0x200F548) == 0x02
-        if topRightMove then
+        elseif locateCursor(topRight.addresses, topRight.values) then
             --console:log("Cursor is in the Top Right Move")
+            return 1
+        elseif locateCursor(bottomLeft.addresses, bottomLeft.values) then 
+            --console:log("Cursor is in the Bottom Left Move")
             return 2
-        end
-
-        local bottomRightMove = emu:read8(0x200F508) == 0x20 and
-                                emu:read8(0x200F548) == 0x20 and
-                                emu:read8(0x200F588) == 0x01 and
-                                emu:read8(0x200F5C8) == 0x02
-        if bottomRightMove then
+        elseif locateCursor(bottomRight.addresses, bottomRight.values) then
             --console:log("Cursor is in the Bottom Right Move")
             return 3
         end
@@ -1078,11 +1125,11 @@ function Update()
         CurrentBattleMenuSelect = Game:getCursorSelection()
     end
 
-    if readBattleAddress() == 0 and Game:getCursorSelection() ~= CurrentBattleMenuSelect then
-        console:log("Battle Menu Selection Changed!")
-        console:log(string.format("Current Battle Menu Selection: %d, Previous Battle Menu Selection: %d", Game:getCursorSelection(), CurrentBattleMenuSelect))
-        CurrentBattleMenuSelect = Game:getCursorSelection()
-    end
+    -- if readBattleAddress() == 0 and Game:getCursorSelection() ~= CurrentBattleMenuSelect then
+    --     console:log("Battle Menu Selection Changed!")
+    --     console:log(string.format("Current Battle Menu Selection: %d, Previous Battle Menu Selection: %d", Game:getCursorSelection(), CurrentBattleMenuSelect))
+    --     CurrentBattleMenuSelect = Game:getCursorSelection()
+    -- end
 
 
 
@@ -1155,7 +1202,7 @@ function Update()
         end
 	end
 
-    PrintBuffer:moveCursor(0,1)
+    --PrintBuffer:moveCursor(0,1)
     
 end
 
@@ -1310,20 +1357,58 @@ function ReceiveFromSocket()
 
                 if command == "PRESS_KEY" then
                     local input_num = tonumber(value)
+                    console:log("PRESS KEY NUMBER: " .. input_num)
                     emu:addKey(input_num)
-                    socket:send("received message" .. "\r\n")
+                    emu:runFrame()
+                    socket:send("KEY_PRESSED, " .. input_num .. "\r\n")
+
                 elseif command == "RELEASE_KEY" then
                     local input_num = tonumber(value)
+                    console:log("RELEASE KEY NUMBER: " .. input_num)
                     emu:clearKey(input_num)
-                    socket:send("received message" .. "\r\n")
+                    socket:send("KEY_RELEASED" .. "\r\n")
+
+                elseif command == "SELECT_MOVE" then
+                    local moveIndex = tonumber(value)
+                    console:log("Received move data from network" .. moveIndex)
+                    local inPartyOrBag = emu:read8(0x200E728)
+                    -- console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
+                    if inPartyOrBag == 0x38 then
+                        console:log("Cursor is in the Pokemon Party, skipping move selection.")
+                    elseif inPartyOrBag == 0x14 then
+                        console:log("Cursor is in the Bag, skipping move selection.")
+                    else  --not in party or bag 
+                        CurrentMoveIndex = 1
+                        IsAwaitingKeyAck = true
+                        MovePath = Game:moveCursor(moveIndex)
+                        --console:log("Path is: " .. table.concat(MovePath, ", "))
+
+                        local key = MovePath[CurrentMoveIndex]
+                        socket:send("PRESS_KEY," .. key .. "\r\n")     
+                    end
                 end
             else
                 if msg == "SAVED_TURN_DATA" then
                     console:log("Turn data saved successfully!")
                     SocketCommunicating = false
+
                 elseif msg == "ERROR" then
                     console:log("Socket communication failure!")
                     SocketCommunicating = false
+
+                elseif msg == "KEY_PRESSED" then
+                    console:log("IN KEY PRESSED")
+                    if IsAwaitingKeyAck and CurrentMoveIndex < #MovePath then
+                        CurrentMoveIndex = CurrentMoveIndex + 1
+                        local key = MovePath[CurrentMoveIndex]
+                        console:log("Next key press: " .. key)
+                        socket:send("PRESS_KEY," .. key .. "\r\n")
+                    else   
+                        console:log("All keys sent.")
+                        IsAwaitingKeyAck = false
+                        MovePath = {}
+                        CurrentMoveIndex = 1
+                    end
                 end
             end
         end

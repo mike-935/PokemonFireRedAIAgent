@@ -8,6 +8,7 @@ from .GameTranslator import GameTranslator
 from .GameTranslatorPandas import GameTranslatorPandas
 import Network
 import os
+import time
 
 HOST = "127.0.0.1"
 PORT = 65432
@@ -21,8 +22,8 @@ class EmuRelay:
         self.GameTranslatorPandas = GameTranslatorPandas()
         torch.manual_seed(37)
         self.neural_network = Network.Network()
-        # self.neural_network.train_test_network()
-        self.GameTranslatorPandas.update_old_csv_with_status()
+        self.neural_network.train_test_network()
+        #self.GameTranslatorPandas.update_old_csv_with_status()
         print(f'Bound to port {self.port}')
 
     # Send a message to the server
@@ -43,11 +44,11 @@ class EmuRelay:
         return message
     
     def send_button(self, connection, value):
-        self.send_message(connection, f'PRESS_KEY {value}')
+        return self.send_message(connection, f'PRESS_KEY {value}')
         # return self.recieve_message()
     
     def send_button_release(self, connection, value):
-        self.send_message(connection, f'RELEASE_KEY {value}')
+        return self.send_message(connection, f'RELEASE_KEY {value}')
 
     # Run the server to listen for incoming connections and handle messages
     def run(self):
@@ -62,7 +63,7 @@ class EmuRelay:
                     print('Received data:')
                     if data:
                         print('We read:', data)
-                        response = self.parse_input(data)
+                        response = self.parse_input(data, connection)
                         self.send_message(connection, response)
 
         except (KeyboardInterrupt, SystemExit) as e:
@@ -74,16 +75,20 @@ class EmuRelay:
         print("Closing socket...")
         self.socket.close()
         
-    def parse_input(self, data):
+    def parse_input(self, data, connection):
         print("Parsing input data:")
-        split_data = data.split(",")
+        split_data = data.strip().split(",")
         response = "ERROR"
-        print('split data: ', split_data)
+        print('split data: ', split_data[0])
+        # print('split data: ', split_data[1])
         match split_data[0]:
             case "REQUEST_AI_MOVE":
                 print('IN REQUEST_AI_MOVE')
                 formatted_data = self.GameTranslatorPandas.translate(split_data)
                 print("This is the data for the move request:", formatted_data)
+                ai_action = self.neural_network.generate_ai_decision(formatted_data)
+                print('ai_action:', ai_action)
+                response = f"SELECT_MOVE {ai_action}"
                 # response = f"Decision: {str(self.neural_network.generate_ai_decision(formatted_data))}"
                 #formatted_data = self.GameTranslator.translate(split_data)
                 #tensor_data = torch.tensor(formatted_data, dtype=torch.float32)
@@ -93,6 +98,17 @@ class EmuRelay:
                 #formatted_data = self.GameTranslator.translate(split_data, True)
                 print("Here is the formatted data to save:", formatted_data)
                 response = "SAVED_TURN_DATA"
+            case "PRESS_KEY":
+                #time.sleep(0.1)
+                value = split_data[1]
+                response = f'PRESS_KEY {value}'
+            case "KEY_PRESSED":
+                #time.sleep(0.1)
+                value = split_data[1]
+                response = f'RELEASE_KEY {value}'
+            case "KEY_RELEASED":
+                #time.sleep(0.1)
+                response = 'KEY_PRESSED'
             case _:
                 print("Unsupported command:", split_data[0])
         return response

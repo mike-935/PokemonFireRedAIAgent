@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 class Network(nn.Module):
-    def __init__(self, input_size=530, hidden_layer1=10, hidden_layer2=12, output_size = 9):
+    def __init__(self, input_size=544, hidden_layer1=10, hidden_layer2=12, output_size = 9):
         super().__init__()
         #self.df = pd.read_csv("battle_data.csv")
         self.move_effect_embeddings = nn.Embedding(355, 16)
