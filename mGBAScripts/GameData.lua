@@ -395,7 +395,7 @@ function GameData.moveCursor(game,targetMove)
         [0] = { [1] = {0, 4}, [2] = {0, 7}, [3] = {0, 4, 7} },
         [1] = { [0] = {0, }, [2] = {0, 5, 7}, [3] = {0, 4} },
         [2] = { [0] = {0, 6}, [1] = {0, 4, 6}, [3] = {0, 4} },
-        [3] = { [0] = {5}, [1] = {0, 6}, [2] = {0, 5} }
+        [3] = { [0] = {0, 5, 6}, [1] = {0, 6}, [2] = {0, 5} }
     }
 
     if currentMove == -6 then
@@ -1359,7 +1359,7 @@ function ReceiveFromSocket()
                     local input_num = tonumber(value)
                     console:log("PRESS KEY NUMBER: " .. input_num)
                     emu:addKey(input_num)
-                    emu:runFrame()
+
                     socket:send("KEY_PRESSED, " .. input_num .. "\r\n")
 
                 elseif command == "RELEASE_KEY" then
@@ -1372,7 +1372,6 @@ function ReceiveFromSocket()
                     local moveIndex = tonumber(value)
                     console:log("Received move data from network" .. moveIndex)
                     local inPartyOrBag = emu:read8(0x200E728)
-                    -- console:log("Cursor is in: " .. string.format("0x%02X", inPartyOrBag))
                     if inPartyOrBag == 0x38 then
                         console:log("Cursor is in the Pokemon Party, skipping move selection.")
                     elseif inPartyOrBag == 0x14 then
@@ -1401,7 +1400,7 @@ function ReceiveFromSocket()
                     if IsAwaitingKeyAck and CurrentMoveIndex < #MovePath then
                         CurrentMoveIndex = CurrentMoveIndex + 1
                         local key = MovePath[CurrentMoveIndex]
-                        console:log("Next key press: " .. key)
+
                         socket:send("PRESS_KEY," .. key .. "\r\n")
                     else   
                         console:log("All keys sent.")

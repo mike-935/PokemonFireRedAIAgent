@@ -99,15 +99,13 @@ class EmuRelay:
                 print("Here is the formatted data to save:", formatted_data)
                 response = "SAVED_TURN_DATA"
             case "PRESS_KEY":
-                #time.sleep(0.1)
                 value = split_data[1]
                 response = f'PRESS_KEY {value}'
             case "KEY_PRESSED":
-                #time.sleep(0.1)
+                time.sleep(0.5)
                 value = split_data[1]
                 response = f'RELEASE_KEY {value}'
             case "KEY_RELEASED":
-                #time.sleep(0.1)
                 response = 'KEY_PRESSED'
             case _:
                 print("Unsupported command:", split_data[0])
