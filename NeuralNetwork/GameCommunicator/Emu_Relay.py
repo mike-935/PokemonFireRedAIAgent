@@ -22,7 +22,7 @@ class EmuRelay:
         self.GameTranslatorPandas = GameTranslatorPandas()
         torch.manual_seed(37)
         self.neural_network = Network.Network()
-        self.neural_network.train_test_network()
+        #self.neural_network.train_test_network()
         #self.GameTranslatorPandas.update_old_csv_with_status()
         print(f'Bound to port {self.port}')
 
@@ -102,10 +102,11 @@ class EmuRelay:
                 value = split_data[1]
                 response = f'PRESS_KEY {value}'
             case "KEY_PRESSED":
-                time.sleep(0.5)
+                time.sleep(0.2)
                 value = split_data[1]
                 response = f'RELEASE_KEY {value}'
             case "KEY_RELEASED":
+                time.sleep(0.4)
                 response = 'KEY_PRESSED'
             case _:
                 print("Unsupported command:", split_data[0])

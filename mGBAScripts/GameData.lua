@@ -391,11 +391,16 @@ function GameData.moveCursor(game,targetMove)
     console:log("In move cursor")
     local currentMove = game:getCursorSelection()
 
-     local moveMap = {
-        [0] = { [1] = {0, 4}, [2] = {0, 7}, [3] = {0, 4, 7} },
-        [1] = { [0] = {0, }, [2] = {0, 5, 7}, [3] = {0, 4} },
-        [2] = { [0] = {0, 6}, [1] = {0, 4, 6}, [3] = {0, 4} },
-        [3] = { [0] = {0, 5, 6}, [1] = {0, 6}, [2] = {0, 5} }
+    local moveMap = {
+        [0] = { [0] = {0, 0}, [1] = {0, 4, 0}, [2] = {0, 7, 0}, [3] = {0, 4, 7, 0} },
+        [1] = { [0] = {0, 5, 0}, [1] = {0, 0}, [2] = {0, 5, 7, 0}, [3] = {0, 4, 0} },
+        [2] = { [0] = {0, 6, 0}, [1] = {0, 4, 6, 0}, [2] = {0, 0}, [3] = {0, 4, 0} },
+        [3] = { [0] = {0, 5, 6, 0}, [1] = {0, 6, 0}, [2] = {0, 5, 0}, [3] = {0, 0} },
+        [4] = { [-1] = {7, 0, 4, 7, 0, 0}},
+        [5] = { [-1] = {7, 0, 4, 7, 7, 0, 0}},
+        [6] = { [-1] = {7, 0, 4, 7, 7, 7, 0, 0}},
+        [8] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 0, 0}},
+        [7] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 7, 0, 0}}
     }
 
     if currentMove == -6 then
@@ -403,7 +408,14 @@ function GameData.moveCursor(game,targetMove)
         return
     end
 
-    local path = moveMap[currentMove][targetMove]
+    local path 
+
+    if targetMove >= 4 and targetMove <= 8 then
+        path = moveMap[targetMove][-1]
+    else
+        path = moveMap[currentMove][targetMove]
+    end
+    
 
     return path
 end
