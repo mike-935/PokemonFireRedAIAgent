@@ -70,9 +70,26 @@ local GameData = {
     end 
 }
 
+MovePathQueue = {}
 MovePath = {}         -- full list of key steps
+CurrentPathIndex = 1 -- Index in movepathqueue
 CurrentMoveIndex = 1  -- index we're on in MovePath
 IsAwaitingKeyAck = false
+CurrentKeySequence = nil
+WaitingToSendAI = false
+PreBattleHandled = false
+MoveMap = {
+        [0] = { [0] = {0, 0}, [1] = {0, 4, 0}, [2] = {0, 7, 0}, [3] = {0, 4, 7, 0} },
+        [1] = { [0] = {0, 5, 0}, [1] = {0, 0}, [2] = {0, 5, 7, 0}, [3] = {0, 4, 0} },
+        [2] = { [0] = {0, 6, 0}, [1] = {0, 4, 6, 0}, [2] = {0, 0}, [3] = {0, 4, 0} },
+        [3] = { [0] = {0, 5, 6, 0}, [1] = {0, 6, 0}, [2] = {0, 5, 0}, [3] = {0, 0} },
+        [4] = { [-1] = {7, 0, 4, 7, 0, 0}},
+        [5] = { [-1] = {7, 0, 4, 7, 7, 0, 0}},
+        [6] = { [-1] = {7, 0, 4, 7, 7, 7, 0, 0}},
+        [7] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 0, 0}},
+        [8] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 7, 0, 0}},
+        [9] = { [-1] = {0}}
+    }
 
 GBA_KEY = {
     A = 0,
@@ -389,31 +406,21 @@ end
 
 function GameData.moveCursor(game,targetMove)
     console:log("In move cursor")
+    console:log("Target Move: " ..targetMove)
+    
     local currentMove = game:getCursorSelection()
+    console:log("Current move: " .. currentMove)
 
-    local moveMap = {
-        [0] = { [0] = {0, 0}, [1] = {0, 4, 0}, [2] = {0, 7, 0}, [3] = {0, 4, 7, 0} },
-        [1] = { [0] = {0, 5, 0}, [1] = {0, 0}, [2] = {0, 5, 7, 0}, [3] = {0, 4, 0} },
-        [2] = { [0] = {0, 6, 0}, [1] = {0, 4, 6, 0}, [2] = {0, 0}, [3] = {0, 4, 0} },
-        [3] = { [0] = {0, 5, 6, 0}, [1] = {0, 6, 0}, [2] = {0, 5, 0}, [3] = {0, 0} },
-        [4] = { [-1] = {7, 0, 4, 7, 0, 0}},
-        [5] = { [-1] = {7, 0, 4, 7, 7, 0, 0}},
-        [6] = { [-1] = {7, 0, 4, 7, 7, 7, 0, 0}},
-        [7] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 0, 0}},
-        [8] = { [-1] = {7, 0, 4, 7, 7, 7, 7, 7, 0, 0}}
-    }
-
-    if currentMove == -6 then
-        console:log("Unknown move")
-        return
+    if currentMove == 6 then
+        currentMove = 0
     end
 
     local path 
 
     if targetMove >= 4 and targetMove <= 8 then
-        path = moveMap[targetMove][-1]
+        path = MoveMap[targetMove][-1]
     else
-        path = moveMap[currentMove][targetMove]
+        path = MoveMap[currentMove][targetMove]
     end
     
 
@@ -447,6 +454,16 @@ function getLastUsedMoveID()
 end
 
 
+function GameData.sendPythonMessage(game)
+    console:log("Preparing to message python...")
+
+    local command = "PRESS_A"
+
+    console:log("Sending data: " .. command)
+    SendMessageToServer(command)
+    console:log("Finished sending data.")
+    
+end
 --[[
 Sends a message to the python socket with the current turn data
 if we are on training mode it sends the old turn data and the move made for that turn
@@ -1044,7 +1061,7 @@ function Input()
     if selectedKey ~= LastPressedKey then
         -- console:log(string.format("Current Selected Key: 0x%02X", selectedKey))
         LastPressedKey = selectedKey
-        if (LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.RIGHT) and readBattleAddress() == 0) then
+        if (LastPressedKey == (HEX_KEYS.A_X | HEX_KEYS.RIGHT) and readBattleAddress() ~= 0) then
             local battlersCount = Game:getBattlersCount()
             if battlersCount == 4 then
                 console:log("Cannot currently use AI in a double battle!")
@@ -1094,7 +1111,6 @@ function Update()
         PrintBuffer:print("Game or PrintBuffer is not initialized!")
         return
     end
-    
 
     CurrentPokemon = Pokemon[CurrentSelectedPokemon][2]
     local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
@@ -1120,10 +1136,29 @@ function Update()
         return
     end
 
+    local prebattle = emu:read8(0x03004F84)
+    --console:log("PREBATTLE: " .. prebattle)
+    if prebattle == 249 and not PreBattleHandled then
+        PreBattleHandled = true
+        Game.sendPythonMessage()     
+    elseif prebattle == 85 then
+        if UseBattleAI then
+            if not SocketCommunicating then
+                console:log("Sending turn data...")
+                SocketCommunicating = true
+                Game:contactPythonSocket(currentActivePlayerPokemon)
+                -- Game:requestAIMove(currentActivePlayerPokemon, true)
+                console:log("Turn Data sent!")
+                -- On message receive turn off SocketCommunicating
+            end
+        end
+    end
+
     if InBattle ~= readBattleAddress() and readBattleAddress() == 0 and not Game:checkIfInSafariZone() then
         console:log("First entering battle!")
         console:log(string.format("Battler count: %d, Our pokemon species %s", Game:getBattlersCount(), emu:read16(Game.playerBattlePokemonStruct)))
         console:log(string.format("If in Safari: %s", Game:checkIfInSafariZone()))
+
         local leftOwn = emu:read8(Game.battlerPartyIndexes) + 1
         local leftOwnPoke = Game:getPokemonData(Pokemon[leftOwn][2])
         console:log(string.format("Left Own Pokemon: %s, Species: %d", Game:getPokemonName(leftOwnPoke.species), leftOwnPoke.species))
@@ -1135,15 +1170,9 @@ function Update()
         InBattle = readBattleAddress()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
         CurrentBattleMenuSelect = Game:getCursorSelection()
+        
+        console:log("battle ai status: " .. tostring(UseBattleAI))
     end
-
-    -- if readBattleAddress() == 0 and Game:getCursorSelection() ~= CurrentBattleMenuSelect then
-    --     console:log("Battle Menu Selection Changed!")
-    --     console:log(string.format("Current Battle Menu Selection: %d, Previous Battle Menu Selection: %d", Game:getCursorSelection(), CurrentBattleMenuSelect))
-    --     CurrentBattleMenuSelect = Game:getCursorSelection()
-    -- end
-
-
 
     --[[
     Check if the turn has changed and we're currently in a singles battle
@@ -1190,6 +1219,7 @@ function Update()
     if InBattle ~= readBattleAddress() and readBattleAddress() ~= 0 and Game:getBattlersCount() == 2 and not Game:checkIfInSafariZone() then
         console:log("Battle Ended in the first turn, so we need to send if necessary")
         FirstTurn = false
+        PreBattleHandled = false
         CurrentBattleMenuSelect = -1
         -- If we are in training mode, we send the turn data to the server
         if TrainingMode and not SocketCommunicating then
@@ -1221,19 +1251,6 @@ end
 -- Pokemon Status
 function printPokeStatus(game, buffer, pkm)
 	buffer:clear()
-	--[[
-	local reverseCharmap = {}
-	for k, v in pairs(Game._charmap) do
- 	   reverseCharmap[v] = k
-	end
-
-	local testMove = "FIGHTING"
-	for i = 1, #testMove do
-    	local char = testMove:sub(i, i)
-    	local byte = reverseCharmap[char]
-    	print(char, string.format("0x%02X", byte))
-	end
-	--]]
 	local currentPokemon = game:getPokemonData(pkm)
 	local partyPokemon = {
         [0] = game:getPokemonData(Pokemon[1][2]),
@@ -1318,21 +1335,6 @@ function EndSocketConnection()
     end
 end
 
---[[
-function send_test(message)
-    if not socket then
-        console:error("Socket is not initialized!")
-        return
-    end
-
-    local success, err = socket:send(message .. "\r\n")
-    if not success then
-        console:error("Failed to send test message: " .. err)
-    else
-        console:log("Message " .. message .. " , sent successfully.")
-    end
-end
---]]
 function SendMessageToServer(message)
     if not socket then
         console:error("Unable to send message because socket is invalid!")
@@ -1379,8 +1381,8 @@ function ReceiveFromSocket()
                     console:log("RELEASE KEY NUMBER: " .. input_num)
                     emu:clearKey(input_num)
                     socket:send("KEY_RELEASED" .. "\r\n")
-
                 elseif command == "SELECT_MOVE" then
+                    console:log("in select move")
                     local moveIndex = tonumber(value)
                     console:log("Received move data from network" .. moveIndex)
                     local inPartyOrBag = emu:read8(0x200E728)
@@ -1389,14 +1391,19 @@ function ReceiveFromSocket()
                     elseif inPartyOrBag == 0x14 then
                         console:log("Cursor is in the Bag, skipping move selection.")
                     else  --not in party or bag 
-                        CurrentMoveIndex = 1
-                        IsAwaitingKeyAck = true
-                        MovePath = Game:moveCursor(moveIndex)
-                        --console:log("Path is: " .. table.concat(MovePath, ", "))
-
-                        local key = MovePath[CurrentMoveIndex]
-                        socket:send("PRESS_KEY," .. key .. "\r\n")     
+                        local newPath = Game:moveCursor(moveIndex)
+                        if newPath then
+                            table.insert(MovePathQueue, newPath)
+                        end
+                        if not IsAwaitingKeyAck and #MovePathQueue > 0 then
+                            CurrentKeySequence = table.remove(MovePathQueue, 1)
+                            CurrentMoveIndex = 1
+                            IsAwaitingKeyAck = true
+                            local key = CurrentKeySequence[CurrentMoveIndex]
+                            socket:send("PRESS_KEY," .. key .. "\r\n")     
+                        end
                     end
+                    --end
                 end
             else
                 if msg == "SAVED_TURN_DATA" then
@@ -1409,16 +1416,18 @@ function ReceiveFromSocket()
 
                 elseif msg == "KEY_PRESSED" then
                     console:log("IN KEY PRESSED")
-                    if IsAwaitingKeyAck and CurrentMoveIndex < #MovePath then
+                    if IsAwaitingKeyAck and CurrentKeySequence then
                         CurrentMoveIndex = CurrentMoveIndex + 1
-                        local key = MovePath[CurrentMoveIndex]
-
-                        socket:send("PRESS_KEY," .. key .. "\r\n")
-                    else   
-                        console:log("All keys sent.")
-                        IsAwaitingKeyAck = false
-                        MovePath = {}
-                        CurrentMoveIndex = 1
+                        if CurrentMoveIndex <= #CurrentKeySequence then
+                            local key = CurrentKeySequence[CurrentMoveIndex]
+                            socket:send("PRESS_KEY," .. key .. "\r\n")
+                        else
+                            console:log("Finished Key Sequence")
+                            IsAwaitingKeyAck = false
+                            CurrentMoveIndex = 1
+                            CurrentKeySequence = nil
+                            SocketCommunicating = false
+                        end
                     end
                 end
             end
