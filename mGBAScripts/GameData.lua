@@ -70,13 +70,9 @@ local GameData = {
     end 
 }
 
-MovePathQueue = {}
 MovePath = {}         -- full list of key steps
-CurrentPathIndex = 1 -- Index in movepathqueue
 CurrentMoveIndex = 1  -- index we're on in MovePath
 IsAwaitingKeyAck = false
-CurrentKeySequence = nil
-WaitingToSendAI = false
 PreBattleHandled = false
 MoveMap = {
         [0] = { [0] = {0, 0}, [1] = {0, 4, 0}, [2] = {0, 7, 0}, [3] = {0, 4, 7, 0} },
@@ -1136,12 +1132,15 @@ function Update()
         return
     end
 
+    -- This is the address that stores the state of dialogue in battles (maybe)  
     local prebattle = emu:read8(0x03004F84)
     --console:log("PREBATTLE: " .. prebattle)
+    --When prebattle is 249 and has not already been sent, send one press of A 
     if prebattle == 249 and not PreBattleHandled then
         PreBattleHandled = true
         Game.sendPythonMessage()     
-    elseif prebattle == 85 then
+    --When prebattle is 85 (wild pokemon battle) or 125(trainer battle) send request for AI move if using battle AI
+    elseif prebattle == 85 or prebattle == 125 then
         if UseBattleAI then
             if not SocketCommunicating then
                 console:log("Sending turn data...")
@@ -1170,8 +1169,6 @@ function Update()
         InBattle = readBattleAddress()
         TurnData = Game:getTurnData(currentActivePlayerPokemon)
         CurrentBattleMenuSelect = Game:getCursorSelection()
-        
-        console:log("battle ai status: " .. tostring(UseBattleAI))
     end
 
     --[[
@@ -1323,7 +1320,6 @@ function initializeSocketConnection()
     local port = 65432
     socket:connect(ip_address, port)
     console:log("Connected our Socket to: " .. ip_address .. ":" .. port .. "\n")
-    -- socket:send("Hi Holly and Ashley" .. "\r\n")
 end
 
 function EndSocketConnection()
@@ -1369,41 +1365,28 @@ function ReceiveFromSocket()
                 local command = parts[1]
                 local value = parts[2]
 
+                --Command to press passed in key, communicate that a key was added to python
                 if command == "PRESS_KEY" then
                     local input_num = tonumber(value)
-                    console:log("PRESS KEY NUMBER: " .. input_num)
                     emu:addKey(input_num)
 
                     socket:send("KEY_PRESSED, " .. input_num .. "\r\n")
-
+                
+                -- Command to release passed in key, communicate that a key was released 
                 elseif command == "RELEASE_KEY" then
                     local input_num = tonumber(value)
-                    console:log("RELEASE KEY NUMBER: " .. input_num)
                     emu:clearKey(input_num)
                     socket:send("KEY_RELEASED" .. "\r\n")
+
+                --Command to receive Ai move from python 
                 elseif command == "SELECT_MOVE" then
-                    console:log("in select move")
                     local moveIndex = tonumber(value)
-                    console:log("Received move data from network" .. moveIndex)
-                    local inPartyOrBag = emu:read8(0x200E728)
-                    if inPartyOrBag == 0x38 then
-                        console:log("Cursor is in the Pokemon Party, skipping move selection.")
-                    elseif inPartyOrBag == 0x14 then
-                        console:log("Cursor is in the Bag, skipping move selection.")
-                    else  --not in party or bag 
-                        local newPath = Game:moveCursor(moveIndex)
-                        if newPath then
-                            table.insert(MovePathQueue, newPath)
-                        end
-                        if not IsAwaitingKeyAck and #MovePathQueue > 0 then
-                            CurrentKeySequence = table.remove(MovePathQueue, 1)
-                            CurrentMoveIndex = 1
-                            IsAwaitingKeyAck = true
-                            local key = CurrentKeySequence[CurrentMoveIndex]
-                            socket:send("PRESS_KEY," .. key .. "\r\n")     
-                        end
-                    end
-                    --end
+                    CurrentMoveIndex = 1
+                    IsAwaitingKeyAck = true
+                    MovePath = Game:moveCursor(moveIndex)
+
+                    local key = MovePath[CurrentMoveIndex]
+                    socket:send("PRESS_KEY," .. key .. "\r\n")     
                 end
             else
                 if msg == "SAVED_TURN_DATA" then
@@ -1414,20 +1397,20 @@ function ReceiveFromSocket()
                     console:log("Socket communication failure!")
                     SocketCommunicating = false
 
+                -- To manage the state where the queue for the move hasn't been fully sent
                 elseif msg == "KEY_PRESSED" then
-                    console:log("IN KEY PRESSED")
-                    if IsAwaitingKeyAck and CurrentKeySequence then
+                    if IsAwaitingKeyAck and CurrentMoveIndex < #MovePath then
                         CurrentMoveIndex = CurrentMoveIndex + 1
-                        if CurrentMoveIndex <= #CurrentKeySequence then
-                            local key = CurrentKeySequence[CurrentMoveIndex]
-                            socket:send("PRESS_KEY," .. key .. "\r\n")
-                        else
-                            console:log("Finished Key Sequence")
-                            IsAwaitingKeyAck = false
-                            CurrentMoveIndex = 1
-                            CurrentKeySequence = nil
-                            SocketCommunicating = false
-                        end
+                        local key = MovePath[CurrentMoveIndex]
+
+                        socket:send("PRESS_KEY," .. key .. "\r\n")
+                    --Once all keys from the queue are sent, reset gloabl variables and finish communicating  
+                    else   
+                        console:log("All keys sent.")
+                        IsAwaitingKeyAck = false
+                        MovePath = {}
+                        CurrentMoveIndex = 1
+                        SocketCommunicating = false
                     end
                 end
             end
